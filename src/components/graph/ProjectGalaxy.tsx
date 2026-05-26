@@ -76,19 +76,6 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
   }, [fgRef, strength]);
 }
 
-// ═══════════ Bounding sphere + camera optimization ═══════════
-function computeBounds(data: { nodes: FGNode[] }) {
-  // Compute the bounding sphere of all currently-added nodes
-  // Returns { center, radius } or null if no nodes
-  const ns = data.nodes;
-  if (ns.length === 0) return null;
-  let cx = 0, cy = 0, cz = 0, maxDist = 0;
-  // After force simulation settles, get actual positions from ForceGraph3D
-  // For initial estimate, use node count to approximate
-  const estRadius = Math.max(15, Math.sqrt(ns.length) * 3);
-  return { cx: 0, cy: 0, cz: 0, radius: estRadius };
-}
-
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
 const DEFS: GalaxySettings = { nodeSize:1, edgeOpacity:0.15, bloomStrength:2.0, chargeStrength:-120, linkDistance:18, linkStrength:0.35, centerGravity:0.15 };
@@ -127,30 +114,26 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   const data = useMemo(() => graph ? toFGData(graph.nodes, graph.edges, isDark) : { nodes:[], links:[] }, [graph, isDark]);
 
-  // ── Dynamic bounds (must be after data) ──
-  const bounds = useMemo(() => computeBounds(data), [data]);
-  const camDist = bounds ? bounds.radius * 2.0 : 50;
-  const camPos = useMemo(() => ({ x: 0, y: camDist * 0.3, z: camDist }), [camDist]);
+  // Initial camera: ForceGraph3D handles this via zoomToFit on first load
+  const camPos = useMemo(() => ({ x: 0, y: 8, z: 30 }), []);
 
   // Reset view
   const handleReset = useCallback(() => {
     const fg: any = fgRef.current;
-    if (!fg || !bounds) return;
+    if (!fg) return;
     const cam = fg.camera();
     if (!cam) return;
-    const target = new THREE.Vector3(0, camDist * 0.3, camDist);
-    const start = cam.position.clone();
-    const t0 = Date.now();
-    const animate = () => {
-      const t = Math.min((Date.now() - t0) / 800, 1);
-      const e = 1 - Math.pow(1 - t, 3);
-      cam.position.lerpVectors(start, target, e);
-      cam.lookAt(0, 0, 0);
-      fg.zoomToFit?.(400, 50);
-      if (t < 1) requestAnimationFrame(animate);
-    };
-    animate();
-  }, [bounds, camDist]);
+    fg.zoomToFit?.(600, 80);
+  }, []);
+
+  // Auto-refocus on root when settings change (avoid losing galaxy)
+  useEffect(() => {
+    const fg: any = fgRef.current;
+    if (!fg || !data.nodes.length) return;
+    // Small delay to let force simulation settle after settings change
+    const t = setTimeout(() => fg.zoomToFit?.(400, 60), 500);
+    return () => clearTimeout(t);
+  }, [settings, data.nodes.length]);
 
   // 3D node
   const nodeObj = useCallback((node: any) => {
