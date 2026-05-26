@@ -121,31 +121,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     }
   }, [loading]);
 
-  // ── Dynamic bounds for adaptive camera ──
-  // (must be after data declaration — see below)
-
-  // Reset view — zoom to fit entire galaxy
-  const handleReset = useCallback(() => {
-    const fg: any = fgRef.current;
-    if (!fg || !bounds) return;
-    const cam = fg.camera();
-    if (!cam) return;
-    // Animate camera to optimal position
-    const target = new THREE.Vector3(0, camDist * 0.3, camDist);
-    const start = cam.position.clone();
-    const startTime = Date.now();
-    const duration = 800;
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const t = Math.min(elapsed / duration, 1);
-      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      cam.position.lerpVectors(start, target, ease);
-      cam.lookAt(0, 0, 0);
-      fg.zoomToFit?.(400, 50);
-      if (t < 1) requestAnimationFrame(animate);
-    };
-    animate();
-  }, [bounds, camDist]);
+  // ── Dynamic bounds + camera (computed after data)
 
   useEffect(() => { const onR = () => setDim({ w: window.innerWidth, h: window.innerHeight }); window.addEventListener("resize", onR); return () => window.removeEventListener("resize", onR); }, []);
 
@@ -155,6 +131,26 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   const bounds = useMemo(() => computeBounds(data), [data]);
   const camDist = bounds ? bounds.radius * 2.0 : 50;
   const camPos = useMemo(() => ({ x: 0, y: camDist * 0.3, z: camDist }), [camDist]);
+
+  // Reset view
+  const handleReset = useCallback(() => {
+    const fg: any = fgRef.current;
+    if (!fg || !bounds) return;
+    const cam = fg.camera();
+    if (!cam) return;
+    const target = new THREE.Vector3(0, camDist * 0.3, camDist);
+    const start = cam.position.clone();
+    const t0 = Date.now();
+    const animate = () => {
+      const t = Math.min((Date.now() - t0) / 800, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      cam.position.lerpVectors(start, target, e);
+      cam.lookAt(0, 0, 0);
+      fg.zoomToFit?.(400, 50);
+      if (t < 1) requestAnimationFrame(animate);
+    };
+    animate();
+  }, [bounds, camDist]);
 
   // 3D node
   const nodeObj = useCallback((node: any) => {
