@@ -195,19 +195,21 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         if (childRing !== 3) continue; // only add satellite (file) nodes
 
         const pos = layout.positions.get(childId);
-        if (!pos) continue;
 
-        // If already in graph, skip
+        // If already in graph (e.g. added by previous expand), just unhide
         if (g.hasNode(childId)) {
-          // make sure it's not hidden
-          try { g.setNodeAttribute(childId, "hidden", false); } catch { /* hot */ }
+          try { g.setNodeAttribute(childId, "hidden", false); } catch { /* node may have been removed */ }
           continue;
         }
 
-        const color = nd.kind === "file" ? getFileColor(nd.extension) : NODE_COLORS.planet;
+        const parentPos = g.getNodeAttributes(dirId) as Record<string, unknown>;
+        const childX = pos?.x ?? ((parentPos.x as number) + (Math.random() - 0.5) * 200);
+        const childY = pos?.y ?? ((parentPos.y as number) + (Math.random() - 0.5) * 200);
+        const color = getFileColor(nd.extension);
+
         g.addNode(childId, {
-          x: pos.x,
-          y: pos.y,
+          x: childX,
+          y: childY,
           label: nd.label,
           path: nd.path,
           kind: nd.kind ?? null,
@@ -456,6 +458,21 @@ export function GraphPage({ projectPath }: GraphPageProps) {
       const tRing = layout.ringMap.get(e.target) ?? 0;
       const er = getEdgeRing(sRing, tRing);
       g.addEdgeWithKey(e.id, e.source, e.target, { edgeRing: er });
+    }
+
+    // ── Validate all nodes have positions ──
+    let missingPositions = 0;
+    g.forEachNode((node) => {
+      const attrs = g.getNodeAttributes(node) as Record<string, unknown>;
+      if (typeof attrs.x !== "number" || typeof attrs.y !== "number" || isNaN(attrs.x) || isNaN(attrs.y)) {
+        missingPositions++;
+        g.setNodeAttribute(node, "x", 0);
+        g.setNodeAttribute(node, "y", 0);
+        console.warn("[Graph] Node missing position, defaulting to (0,0):", node, attrs);
+      }
+    });
+    if (missingPositions > 0) {
+      console.warn(`[Graph] ${missingPositions} nodes had missing positions, fixed`);
     }
 
     // ── Container size guard ──
