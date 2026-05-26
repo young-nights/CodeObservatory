@@ -2,7 +2,7 @@
 // Full-screen when sidebar collapsed, bottom info bar, tag panel, search
 
 import { useState, useCallback, useMemo, useContext } from "react";
-import { RefreshCw, Maximize2, Search, X } from "lucide-react";
+import { RefreshCw, Maximize2, Search, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useScanGraph } from "@/hooks/useObservatory";
 import { CosmicGalaxy, type CosmicGalaxyPanelSettings } from "@/components/graph/CosmicGalaxy";
 import { SidebarContext } from "@/components/layout/AppLayout";
@@ -38,6 +38,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   // ── Tag panel ──
+  const [tagsCollapsed, setTagsCollapsed] = useState(false);
   const [topDirs, setTopDirs] = useState<TopDir[]>([]);
 
   // ── Camera fly-to ──
@@ -124,36 +125,44 @@ export function GraphPage({ projectPath }: GraphPageProps) {
       </div>
 
       {/* ══════ Left Tag Panel (seeds) ══════ */}
-      <div
-        className="co-cosmic-tag-panel"
-        style={{
-          position: "absolute",
-          left: 12,
-          top: 48,
-          zIndex: 25,
-          width: 160,
-        }}
-      >
-        <div className="co-cosmic-tag-card">
-          <h3 className="co-cosmic-tag-title">种子目录</h3>
-          <div className="co-cosmic-tag-grid">
-            {topDirs.length === 0 && (
-              <span className="co-cosmic-tag-empty">扫描中…</span>
-            )}
-            {topDirs.map((dir) => (
-              <button
-                key={dir.id}
-                className="co-cosmic-tag-btn"
-                onClick={() => handleFlyToNode(dir.id)}
-                title={dir.label}
-              >
-                <span className="truncate">{dir.label}</span>
-                <span className="co-cosmic-tag-count">{dir.count}</span>
-              </button>
-            ))}
+      {!tagsCollapsed ? (
+        <div className="co-cosmic-tag-panel">
+          <button
+            onClick={() => setTagsCollapsed(true)}
+            className="co-galaxy-tags-collapse-btn"
+            title="折叠面板"
+          >
+            <ChevronLeft size={12} />
+          </button>
+          <div className="co-cosmic-tag-card">
+            <h3 className="co-cosmic-tag-title">种子目录</h3>
+            <div className="co-cosmic-tag-grid">
+              {topDirs.length === 0 && (
+                <span className="co-cosmic-tag-empty">扫描中…</span>
+              )}
+              {topDirs.map((dir) => (
+                <button
+                  key={dir.id}
+                  className="co-cosmic-tag-btn"
+                  onClick={() => handleFlyToNode(dir.id)}
+                  title={dir.label}
+                >
+                  <span className="truncate">{dir.label}</span>
+                  <span className="co-cosmic-tag-count">{dir.count}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <button
+          onClick={() => setTagsCollapsed(false)}
+          className="co-galaxy-tags-expand"
+          title="展开种子目录"
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
 
       {/* ══════ Action buttons (top right) ══════ */}
       <div

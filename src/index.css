@@ -1193,6 +1193,106 @@ html, body, #root {
 .co-stagger > *:nth-child(10) { animation-delay: 0.29s; }
 
 /* ============================================================
+   Sidebar Collapse / TopBar Expand Buttons (from co-theme.css)
+   ============================================================ */
+.co-sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--co-radius-sm);
+  border: none;
+  background: none;
+  color: var(--co-text-muted);
+  cursor: pointer;
+  transition: all var(--co-duration-fast) var(--co-ease-out);
+}
+.co-sidebar-collapse-btn:hover {
+  color: var(--co-text);
+  background: var(--co-bg-hover);
+}
+
+.co-topbar-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--co-radius-sm);
+  border: none;
+  background: none;
+  color: var(--co-text-muted);
+  cursor: pointer;
+  transition: all var(--co-duration-fast) var(--co-ease-out);
+  margin-right: 4px;
+}
+.co-topbar-expand-btn:hover {
+  color: var(--co-text);
+  background: var(--co-bg-hover);
+}
+
+/* ============================================================
+   Galaxy Tags Panel — collapsible left panel
+   ============================================================ */
+.co-galaxy-tags-panel {
+  position: absolute;
+  left: 12px;
+  top: 48px;
+  z-index: 25;
+  width: 160px;
+  transition: transform 0.25s var(--co-ease-out), opacity 0.2s var(--co-ease-out);
+  pointer-events: auto;
+}
+
+.co-galaxy-tags-collapse-btn {
+  position: absolute;
+  top: 0;
+  right: -28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(10,10,25,0.75);
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.co-galaxy-tags-collapse-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+}
+
+.co-galaxy-tags-expand {
+  position: absolute;
+  left: 8px;
+  top: 48px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(10,10,25,0.75);
+  color: rgba(255,255,255,0.35);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.co-galaxy-tags-expand:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+}
+
+/* ============================================================
    Graph Control Panel — Obsidian-style right panel
    ============================================================ */
 

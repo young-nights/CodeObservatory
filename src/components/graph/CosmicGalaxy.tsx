@@ -478,7 +478,7 @@ function StarNode({
   position,
   size,
   color,
-  emissive,
+  emissive: _emissive,
   depth,
   kind,
   isDust,
@@ -489,7 +489,7 @@ function StarNode({
   position: [number, number, number];
   size: number;
   color: string;
-  emissive: string;
+  emissive?: string;
   depth: number;
   kind: string | null;
   isDust: boolean;
@@ -510,17 +510,6 @@ function StarNode({
     setHovered(false);
     onHover?.(false);
   }, [onHover]);
-
-  // Emissive intensity by hierarchy (+50% brighter)
-  const baseEmissiveIntensity = isDust
-    ? 0
-    : kind !== "file"
-      ? depth === 0
-        ? 2.25 // root — strongest glow
-        : depth === 1
-          ? 1.5 // depth-1 — strong
-          : 0.9 // depth-2 — medium
-      : 0.375; // file — enhanced
 
   useFrame(() => {
     if (!meshRef.current) return;
@@ -555,11 +544,10 @@ function StarNode({
   // Emissive pulsing for root node
   useFrame(() => {
     if (!meshRef.current || depth !== 0 || kind === "file") return;
-    const material = meshRef.current.material as THREE.MeshStandardMaterial;
+    const material = meshRef.current.material as THREE.MeshToonMaterial;
     if (!material) return;
     const pulse = 1 + Math.sin(performance.now() * 0.002) * 0.15;
-    material.emissiveIntensity = baseEmissiveIntensity * pulse * (hovered ? 1.3 : 1);
-    material.roughness = hovered ? 0.2 : 0.35;
+    material.emissiveIntensity = 0.8 * pulse * (hovered ? 1.3 : 1);
   });
 
   return (
@@ -574,12 +562,10 @@ function StarNode({
       onPointerOut={handlePointerOut}
     >
       <sphereGeometry args={[1, 32, 32]} />
-      <meshStandardMaterial
+      <meshToonMaterial
         color={color}
-        emissive={emissive}
-        emissiveIntensity={baseEmissiveIntensity}
-        roughness={0.35}
-        metalness={0.1}
+        emissive={color}
+        emissiveIntensity={0.8}
       />
     </mesh>
   );
@@ -678,6 +664,25 @@ function DustOrbit({
         </mesh>
       ))}
     </group>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NebulaPlane — slowly rotating background plane
+// ═══════════════════════════════════════════════════════════════
+
+function NebulaPlane() {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  useFrame((_, delta) => {
+    if (meshRef.current) {
+      meshRef.current.rotation.z += delta * 0.02;
+    }
+  });
+  return (
+    <mesh ref={meshRef} rotation={[0, 0, Math.PI / 6]} position={[0, 0, -50]}>
+      <planeGeometry args={[200, 200]} />
+      <meshBasicMaterial color="#1a1040" transparent opacity={0.04} />
+    </mesh>
   );
 }
 
@@ -824,8 +829,8 @@ function GalaxyScene({
 
   return (
     <GrowthTimeContext.Provider value={growthTimeRef}>
-      <color attach="background" args={["#000008"]} />
-      <fog attach="fog" args={["#000008", 60, 400]} />
+      <color attach="background" args={["#000004"]} />
+      <fog attach="fog" args={["#000004", 80, 500]} />
       <Stars radius={350} depth={60} count={bgStars} factor={4} saturation={0} fade speed={0.3} />
       <Environment preset="night" />
 
@@ -838,6 +843,17 @@ function GalaxyScene({
         <sphereGeometry args={[4, 32, 32]} />
         <meshBasicMaterial color="#4a6cf7" transparent opacity={0.06} />
       </mesh>
+      {/* Root node multi-layer halos */}
+      <mesh position={[0, 0, 0]}>
+        <ringGeometry args={[2.5, 4, 64]} />
+        <meshBasicMaterial color="#646cff" side={THREE.DoubleSide} transparent opacity={0.08} />
+      </mesh>
+      <mesh position={[0, 0, 0]}>
+        <ringGeometry args={[5, 8, 64]} />
+        <meshBasicMaterial color="#646cff" side={THREE.DoubleSide} transparent opacity={0.03} />
+      </mesh>
+      {/* Nebula background plane */}
+      <NebulaPlane />
 
       <OrbitControls
         enableDamping
