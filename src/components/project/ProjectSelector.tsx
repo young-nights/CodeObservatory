@@ -274,7 +274,7 @@ export function ProjectSelector({
                           theme === "dark" ? "var(--co-accent)" : "transparent",
                         color:
                           theme === "dark"
-                            ? "oklch(100% 0 0)"
+                            ? "#ffffff"
                             : "var(--co-text-muted)",
                         transition: "background var(--co-duration-fast) var(--co-ease-out)",
                       }}
@@ -300,7 +300,7 @@ export function ProjectSelector({
                             : "transparent",
                         color:
                           theme === "light"
-                            ? "oklch(100% 0 0)"
+                            ? "#ffffff"
                             : "var(--co-text-muted)",
                         transition: "background var(--co-duration-fast) var(--co-ease-out)",
                       }}

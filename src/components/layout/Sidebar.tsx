@@ -1,6 +1,5 @@
-// Sidebar — 200px precision navigation
-// Design: Precision Instrument · OKLCH · serif brand · 2px accent indicator
-// Obsidian-style collapsible sidebar with animated transition
+// Sidebar — Cosmic theme, 200px / 48px dual mode
+// Telescope branding, serif font, collapsible navigation
 
 import { cn } from "@/lib/utils";
 import {
@@ -33,16 +32,15 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "co-sidebar flex flex-col h-screen relative shrink-0",
-        collapsed ? "w-[48px]" : "w-[200px]"
+        "co-sidebar co-sidebar-transition flex flex-col h-screen relative shrink-0",
+        collapsed ? "w-[48px]" : "w-[200px]",
       )}
-      style={{ transition: "width 0.2s ease" }}
     >
-      {/* Brand — serif 18px Georgia -0.01em */}
+      {/* Brand — Telescope icon + serif name */}
       <div
         className={cn(
           "co-sidebar-brand shrink-0",
-          collapsed && "justify-center px-0"
+          collapsed && "justify-center px-0",
         )}
       >
         <div className="co-sidebar-brand-icon flex-shrink-0">
@@ -58,7 +56,7 @@ export function Sidebar({
       {/* Separator */}
       <div className="co-sidebar-separator" />
 
-      {/* Navigation — 13px, padding 8px 14px, 2px gap */}
+      {/* Navigation */}
       <nav className="co-sidebar-nav">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
@@ -69,7 +67,7 @@ export function Sidebar({
                 className={cn(
                   "co-nav-item",
                   isActive && "co-nav-item-active",
-                  collapsed && "justify-center px-0"
+                  collapsed && "justify-center px-0",
                 )}
                 title={collapsed ? item.label : undefined}
               >
@@ -90,7 +88,7 @@ export function Sidebar({
       <div
         className={cn(
           "co-sidebar-footer shrink-0",
-          collapsed && "px-0 flex justify-center"
+          collapsed && "px-0 justify-center",
         )}
       >
         {!collapsed ? (

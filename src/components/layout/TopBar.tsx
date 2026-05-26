@@ -1,6 +1,5 @@
-// TopBar — 44px, serif project name, watcher dot + text
-// Design: Precision Instrument · no glass · no badges
-// Obsidian-style: expand button when sidebar is collapsed
+// TopBar — Cosmic theme, 44px
+// Breadcrumb with serif project name, watcher status dot
 
 import { cn } from "@/lib/utils";
 import { FolderOpen, ChevronRight, PanelLeft } from "lucide-react";
@@ -8,7 +7,6 @@ import { FolderOpen, ChevronRight, PanelLeft } from "lucide-react";
 interface TopBarProps {
   projectName?: string;
   watcherRunning?: boolean;
-  children?: React.ReactNode;
   collapsed?: boolean;
   onExpand?: () => void;
 }
@@ -16,13 +14,12 @@ interface TopBarProps {
 export function TopBar({
   projectName,
   watcherRunning,
-  children,
   collapsed,
   onExpand,
 }: TopBarProps) {
   return (
     <header className="co-topbar shrink-0">
-      {/* Left: expand button (when collapsed) + serif project name breadcrumb */}
+      {/* Left: expand button (collapsed) + breadcrumb */}
       <div className="co-topbar-breadcrumb min-w-0">
         {collapsed && (
           <button
@@ -38,49 +35,39 @@ export function TopBar({
             <FolderOpen
               size={13}
               className="shrink-0"
-              style={{ color: "var(--co-text-muted)" }}
+              style={{ color: "var(--cosmic-text-dim)" }}
             />
-            <span style={{ color: "var(--co-text-muted)" }}>
+            <span style={{ color: "var(--cosmic-text-dim)" }}>
               Projects
             </span>
             <ChevronRight
               size={11}
               className="shrink-0"
-              style={{ color: "var(--co-text-dim)" }}
+              style={{ color: "var(--cosmic-text-dim)" }}
             />
             <span className="co-topbar-breadcrumb-current truncate">
               {projectName}
             </span>
           </div>
         ) : (
-          <span
-            className="co-topbar-breadcrumb-current"
-            style={{ fontFamily: "var(--co-font-serif)" }}
-          >
+          <span className="co-topbar-breadcrumb-current">
             CodeObservatory
           </span>
         )}
       </div>
 
-      {/* Center: children */}
-      <div className="flex-1 flex items-center justify-center">
-        {children}
-      </div>
-
-      {/* Right: watcher status — dot + text only */}
+      {/* Right: watcher status dot */}
       <div className="co-topbar-status">
         <div className="co-animate-fade-in flex items-center gap-1.5">
           <span
             className={cn(
               "co-status-dot",
-              watcherRunning ? "co-status-dot-active" : "co-status-dot-idle"
+              watcherRunning ? "co-status-dot-active" : "co-status-dot-idle",
             )}
           />
           <span
             style={{
-              color: watcherRunning
-                ? "var(--co-success)"
-                : "var(--co-text-muted)",
+              color: watcherRunning ? "#50c878" : "var(--cosmic-text-dim)",
             }}
           >
             {watcherRunning ? "Watching" : "Idle"}

@@ -1,11 +1,12 @@
-// Main App component — orchestrates project selection and view routing
+// App — Main entry point
+// Project selector → AppShell with Dashboard / Timeline / Graph views
 
 import { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { AppShell } from "@/components/layout/AppShell";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { DashboardPage } from "@/pages/Dashboard";
 import { TimelinePage } from "@/pages/Timeline";
-import { GraphPage } from "@/pages/Graph";
+import { GraphPage } from "@/pages/GraphPage";
 import { useProject, useWatcher } from "@/hooks/useObservatory";
 
 type ViewTab = "dashboard" | "timeline" | "graph";
@@ -27,9 +28,9 @@ export default function App() {
     );
   }
 
-  // Project is open → show main shell with views
+  // Project is open → main shell with views
   return (
-    <AppLayout
+    <AppShell
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as ViewTab)}
       projectName={project.name}
@@ -38,6 +39,6 @@ export default function App() {
       {activeTab === "dashboard" && <DashboardPage projectPath={project.path} />}
       {activeTab === "timeline" && <TimelinePage projectPath={project.path} />}
       {activeTab === "graph" && <GraphPage projectPath={project.path} />}
-    </AppLayout>
+    </AppShell>
   );
 }

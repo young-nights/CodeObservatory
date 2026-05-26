@@ -24,8 +24,8 @@ interface TooltipProps {
 
 function Tooltip({ children, delayDuration = 300 }: TooltipProps) {
   const [open, setOpen] = React.useState(false);
-  const triggerRef = React.useRef<HTMLDivElement>(null);
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout>>();
+  const triggerRef = React.useRef<HTMLDivElement | null>(null);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const value = React.useMemo(
     () => ({ open, setOpen, triggerRef }),
