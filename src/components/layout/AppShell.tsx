@@ -35,8 +35,8 @@ export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, 
         <Sidebar activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} onToggle={handleToggle} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <TopBar projectName={projectName} watcherRunning={watcherRunning} collapsed={collapsed} onExpand={() => setCollapsed(false)} />
-          <main style={{ flex: 1, overflow: "hidden", background: isDark ? "#05050f" : "#f0f0f5" }}>
-            <div style={{ height: "100%" }}>
+          <main style={{ flex: 1, overflow: "hidden", background: isDark ? "#05050f" : "#f0f0f5", position: "relative" }}>
+            <div style={{ position: "absolute", inset: 0 }}>
               {children}
             </div>
           </main>
