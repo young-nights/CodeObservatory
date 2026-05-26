@@ -78,7 +78,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:0.8, edgeOpacity:0.10, bloomStrength:2.5, chargeStrength:-200, linkDistance:8, linkStrength:0.5, centerGravity:0.5 };
+const DEFS: GalaxySettings = { nodeSize:0.8, edgeOpacity:0.10, bloomStrength:2.5, chargeStrength:-300, linkDistance:6, linkStrength:0.6, centerGravity:0.8 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -193,8 +193,9 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           linkDirectionalParticles={4} linkDirectionalParticleSpeed={0.002} linkDirectionalParticleWidth={2}
           linkDirectionalParticleColor={() => isDark ? "#c4b5fd" : "#818cf8"}
           d3VelocityDecay={0.3} d3AlphaDecay={0.015} cooldownTicks={250}
+          linkCurvature={0.25}
           d3Force={(engine:any)=>{const d3=(window as any).d3;if(!d3)return;if(engine.force){engine.force("charge",d3.forceManyBody?.()?.strength(settings.chargeStrength));engine.force("link",d3.forceLink?.()?.distance(settings.linkDistance)?.strength(settings.linkStrength));engine.force("center",d3.forceCenter?.()?.strength(settings.centerGravity));}}}
-          onNodeClick={(n:any)=>setSelected(n as FGNode)} onBackgroundClick={()=>setSelected(null)} enableNodeDrag />
+          onNodeClick={(n:any)=>{setSelected(n as FGNode)}} onBackgroundClick={()=>setSelected(null)} enableNodeDrag />
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4" style={{ color: clr.ui.muted, fontSize: 13 }}>
           {loading ? (
