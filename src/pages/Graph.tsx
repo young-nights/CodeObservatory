@@ -1,69 +1,77 @@
-// Graph — 星河图谱 · Precision Instrument core visualization
-// Sigma.js WebGL renderer + solarLayout radial concentric rings
-// Star (Root) → Planet (top dir) → Moon (subdir) → Satellite (file) → Dust (change)
-// Hex color space (Sigma WebGL) · exponential easing · expand/collapse progressive reveal
+// Graph — Galaxy Burst · ForceAtlas2 + Sigma.js WebGL
+// All nodes visible at once, force-directed layout radiates from center
+// Warm colors for directories, cool colors for files, pure black background
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
+import forceAtlas2 from "graphology-layout-forceatlas2";
 import { useScanGraph } from "@/hooks/useObservatory";
-import type { FileNode, ChangeRecord } from "@/lib/types";
-import * as api from "@/lib/api";
-import {
-  computeSolarLayout,
-  computeDustPositions,
-  getEdgeRing,
-  RING_NAMES,
-} from "@/lib/solarLayout";
-import { RefreshCw, Maximize2, Home, ChevronDown, ChevronUp } from "lucide-react";
 
-// ── Hex Node Colors (Sigma WebGL requires hex) ──
-const NODE_COLORS = {
-  star: "#d4a017",       // 金色（恒星）
-  planet: "#5b8def",     // 蓝色（行星/目录）
-  moon: "#7b9cef",       // 淡蓝（卫星/子目录）
-  dust: "#a09060",       // 淡金（尘埃/历史）
-  default: "#8899aa",    // 灰色
-} as const;
+import { RefreshCw, Maximize2 } from "lucide-react";
 
-// Extension → hex color for file/satellite nodes (Sigma WebGL requires hex)
+// ── Color system: warm → dir / cool → file ──
+const DIR_COLOR_ROOT = "#ffffff"; // 中心恒星 — 纯白
+const DIR_COLOR_L1 = "#ffd700"; // 一级目录 — 金色
+const DIR_COLOR_DEEP = "#ff8c42"; // 深级目录 — 橙色
+const FILE_COLOR_DEFAULT = "#a0a0c0"; // 其他文件 — 淡紫灰
+
 const EXT_COLORS: Record<string, string> = {
-  ts: "#5b8def", tsx: "#6b9df0",
-  js: "#56b6c2", jsx: "#66c6d2",
-  rs: "#e07050",         // Rust 橙
-  md: "#b070d0",         // Markdown 紫
-  json: "#d4b040", toml: "#d4b040", yaml: "#d4b040", yml: "#d4b040",
-  css: "#50b070", scss: "#60c080",
-  html: "#d07040",
-  py: "#40b0c0",
-  c: "#8899aa", h: "#8899aa", cpp: "#8899aa", hpp: "#8899aa",
-  go: "#60b0d0",
+  ts: "#00bfff",
+  tsx: "#00bfff",
+  js: "#5dade2",
+  jsx: "#5dade2",
+  rs: "#9370db",
+  md: "#7b68ee",
+  json: "#6495ed",
+  toml: "#6495ed",
+  yaml: "#6495ed",
+  yml: "#6495ed",
+  css: "#48d1cc",
+  scss: "#48d1cc",
+  html: "#1e90ff",
+  py: "#00ced1",
+  c: "#87ceeb",
+  h: "#87ceeb",
+  cpp: "#87ceeb",
+  hpp: "#87ceeb",
+  go: "#5f9ea0",
 };
 
-// ── Node Sizes ──
-const NODE_SIZES = {
-  star: 26,      // 恒星大一点
-  planet: 14,    // 行星
-  moon: 10,      // 子目录
-  satellite: 7,  // 文件
-  dust: 4,       // 历史
-} as const;
+// ── Edge colors: near → far graduated ──
+const EDGE_COLORS = [
+  "rgba(255,215,0,0.12)", // 近中心 — 金色调
+  "rgba(255,140,66,0.08)", // 中层 — 橙色调
+  "rgba(0,191,255,0.04)", // 外层 — 蓝调
+];
 
-// ── Edge orbit colors & thickness ──
-const ORBIT_COLOR = "rgba(255,255,255,0.08)";  // 更亮一点
-const EDGE_THICKNESS = [0.8, 0.6, 0.4, 0.3, 0.2];  // 加粗
-
-const LABEL_ZOOM_THRESHOLD = 2.0;
+// ── Node sizes: burst pattern (center large, outward smaller) ──
+const SIZE_ROOT = 32;
+const SIZE_DIR_L1 = 16;
+const SIZE_DIR_DEEP = 10;
+const SIZE_FILE = 6;
 
 // ── Helpers ──
 
-function getFileColor(ext?: string): string {
-  if (!ext) return NODE_COLORS.default;
-  return EXT_COLORS[ext.toLowerCase()] ?? NODE_COLORS.default;
+function getNodeColor(kind: string | null, depth: number, ext?: string): string {
+  if (kind !== "file") {
+    // directory
+    if (depth === 0) return DIR_COLOR_ROOT;
+    if (depth === 1) return DIR_COLOR_L1;
+    return DIR_COLOR_DEEP;
+  }
+  // file
+  if (ext) return EXT_COLORS[ext.toLowerCase()] ?? FILE_COLOR_DEFAULT;
+  return FILE_COLOR_DEFAULT;
 }
 
-function getNodeTypeByRing(ring: number): FileNode["nodeType"] {
-  return (RING_NAMES[ring] as FileNode["nodeType"]) ?? "satellite";
+function getNodeSize(kind: string | null, depth: number): number {
+  if (kind !== "file") {
+    if (depth === 0) return SIZE_ROOT;
+    if (depth === 1) return SIZE_DIR_L1;
+    return SIZE_DIR_DEEP;
+  }
+  return SIZE_FILE;
 }
 
 function formatSize(bytes?: number): string {
@@ -71,47 +79,6 @@ function formatSize(bytes?: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function formatChangeKind(kind: string): string {
-  switch (kind) {
-    case "created": return "✚";
-    case "modified": return "✎";
-    case "deleted": return "✕";
-    default: return kind;
-  }
-}
-
-function shortTimestamp(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } catch {
-    return iso.slice(0, 5);
-  }
-}
-
-// ── GraphNode extended attributes ──
-interface GraphNodeAttr {
-  x: number;
-  y: number;
-  label: string;
-  path: string;
-  kind: "dir" | "file" | null;
-  ring: number;
-  nodeType: FileNode["nodeType"];
-  color: string;
-  nodeSize: number;
-  hasChildren: boolean;
-  hidden: boolean;
-  // for file nodes: cached extension, size
-  extension?: string;
-  size?: number;
-  // for dust nodes
-  changeKind?: string;
-  changeTimestamp?: string;
-  changeSummary?: string;
 }
 
 // ── Component ──
@@ -124,12 +91,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   const { graph: graphData, loading, refresh } = useScanGraph(projectPath);
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const graphRef = useRef<Graph | null>(null);
-
-  // Persistent refs for expand/collapse state
-  const expandedDirsRef = useRef<Set<string>>(new Set());
-  const expandedFilesRef = useRef<Set<string>>(new Set());
-  const dustCacheRef = useRef<Map<string, ChangeRecord[]>>(new Map());
+  const highlightedNodeRef = useRef<string | null>(null);
 
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
@@ -140,628 +102,493 @@ export function GraphPage({ projectPath }: GraphPageProps) {
     kind: string;
     size: string;
   }>({ visible: false, x: 0, y: 0, label: "", path: "", kind: "", size: "" });
-  const [labelsVisible, setLabelsVisible] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
 
-  // ── Compute solar layout ──
-  const layout = useMemo(
-    () => (graphData ? computeSolarLayout(graphData.nodes, graphData.edges, projectPath) : null),
-    [graphData, projectPath],
-  );
+  const [layoutDone, setLayoutDone] = useState(false);
 
-  // Derived counts
-  const nodeMap = useMemo(
-    () => new Map((graphData?.nodes ?? []).map((n) => [n.id, n])),
-    [graphData],
-  );
-  const starCount = layout ? 1 : 0;
-  const planetCount = layout
-    ? [...layout.ringMap.values()].filter((r) => r === 1).length
-    : 0;
-  const moonCount = layout
-    ? [...layout.ringMap.values()].filter((r) => r === 2).length
-    : 0;
-  const fileCount = layout
-    ? [...layout.ringMap.values()].filter((r) => r === 3).length
-    : 0;
+  // ── Build internal graphology graph + forceAtlas2 layout ──
+  const internalGraph = useMemo(() => {
+    if (!graphData) return null;
+    setLayoutDone(false);
 
-  // ── Expand one directory: add its direct file children to the graph ──
-  const expandDir = useCallback(
-    (dirId: string) => {
-      const g = graphRef.current;
-      const s = sigmaRef.current;
-      if (!g || !s || !layout) return;
+    const g = new Graph({ multi: false, type: "directed", allowSelfLoops: false });
 
-      const children = layout.childMap.get(dirId);
-      if (!children || children.length === 0) return;
+    // Find root & build child map
+    const targeted = new Set(graphData.edges.map((e) => e.target));
+    let rootId = graphData.nodes.find((n) => !targeted.has(n.id))?.id;
+    const childMap = new Map<string, string[]>();
+    for (const e of graphData.edges) {
+      const arr = childMap.get(e.source) || [];
+      arr.push(e.target);
+      childMap.set(e.source, arr);
+    }
 
-      for (const childId of children) {
-        const nd = nodeMap.get(childId);
-        const childRing = layout.ringMap.get(childId);
-        if (!nd || childRing == null) continue;
-        if (childRing !== 3) continue; // only add satellite (file) nodes
-
-        const pos = layout.positions.get(childId);
-
-        // If already in graph (e.g. added by previous expand), just unhide
-        if (g.hasNode(childId)) {
-          try { g.setNodeAttribute(childId, "hidden", false); } catch { /* node may have been removed */ }
-          continue;
-        }
-
-        const parentPos = g.getNodeAttributes(dirId) as Record<string, unknown>;
-        const childX = pos?.x ?? ((parentPos.x as number) + (Math.random() - 0.5) * 200);
-        const childY = pos?.y ?? ((parentPos.y as number) + (Math.random() - 0.5) * 200);
-        const color = getFileColor(nd.extension);
-
-        g.addNode(childId, {
-          x: childX,
-          y: childY,
-          label: nd.label,
-          path: nd.path,
-          kind: nd.kind ?? null,
-          ring: childRing,
-          nodeType: "satellite",
-          color,
-          nodeSize: NODE_SIZES.satellite,
-          hasChildren: false,
-          hidden: false,
-          extension: nd.extension,
-          size: nd.size,
-        });
-
-        // Add edge from parent to this file
-        const edgeRing = getEdgeRing(layout.ringMap.get(dirId) ?? 1, childRing);
-        const edgeId = `${dirId}→${childId}`;
-        if (!g.hasEdge(edgeId)) {
-          g.addEdgeWithKey(edgeId, dirId, childId, { edgeRing });
-        }
-      }
-
-      expandedDirsRef.current.add(dirId);
-      s.refresh();
-    },
-    [layout, nodeMap],
-  );
-
-  // ── Collapse one directory: remove its file children ──
-  const collapseDir = useCallback(
-    (dirId: string) => {
-      const g = graphRef.current;
-      const s = sigmaRef.current;
-      if (!g || !s || !layout) return;
-
-      const children = layout.childMap.get(dirId);
-      if (!children) return;
-
-      for (const childId of children) {
-        const childRing = layout.ringMap.get(childId);
-        if (childRing !== 3) continue;
-
-        // Also collapse any expanded dust for this file
-        if (expandedFilesRef.current.has(childId)) {
-          collapseFile(childId);
-        }
-
-        if (g.hasNode(childId)) {
-          g.dropNode(childId);
-        }
-      }
-
-      expandedDirsRef.current.delete(dirId);
-      s.refresh();
-    },
-    [layout],
-  );
-
-  // ── Expand one file: fetch changelog, create dust nodes ──
-  const expandFile = useCallback(
-    async (fileId: string) => {
-      const g = graphRef.current;
-      const s = sigmaRef.current;
-      if (!g || !s || !layout) return;
-
-      if (expandedFilesRef.current.has(fileId)) return;
-
-      const fileNode = nodeMap.get(fileId);
-      if (!fileNode) return;
-
-      let changes: ChangeRecord[];
-      // Check cache first
-      const cached = dustCacheRef.current.get(fileId);
-      if (cached) {
-        changes = cached;
-      } else {
-        try {
-          changes = await api.getFileChanges(projectPath, fileNode.path);
-          dustCacheRef.current.set(fileId, changes);
-        } catch {
-          console.warn("Failed to fetch changes for", fileNode.path);
-          return;
-        }
-      }
-
-      if (changes.length === 0) {
-        expandedFilesRef.current.add(fileId); // mark expanded even if empty
-        return;
-      }
-
-      const sector = layout.sectorMap.get(fileId) ?? { start: 0, end: 2 * Math.PI };
-      const dustIds = changes.map((c) => `dust-${c.id}`);
-      const dustPositions = computeDustPositions(dustIds, sector.start, sector.end);
-
-      for (let i = 0; i < changes.length; i++) {
-        const c = changes[i];
-        const dId = `dust-${c.id}`;
-        if (g.hasNode(dId)) continue;
-
-        const pos = dustPositions.get(dId);
-        if (!pos) continue;
-
-        g.addNode(dId, {
-          x: pos.x,
-          y: pos.y,
-          label: `${formatChangeKind(c.kind)} ${shortTimestamp(c.timestamp)}`,
-          path: c.filePath,
-          kind: null,
-          ring: 4,
-          nodeType: "dust",
-          color: NODE_COLORS.dust,
-          nodeSize: NODE_SIZES.dust,
-          hasChildren: false,
-          hidden: false,
-          changeKind: c.kind,
-          changeTimestamp: c.timestamp,
-          changeSummary: c.summary,
-        });
-
-        // Edge from file to dust
-        const edgeId = `${fileId}→${dId}`;
-        if (!g.hasEdge(edgeId)) {
-          g.addEdgeWithKey(edgeId, fileId, dId, { edgeRing: 3 });
-        }
-      }
-
-      expandedFilesRef.current.add(fileId);
-      s.refresh();
-    },
-    [layout, nodeMap, projectPath],
-  );
-
-  // ── Collapse one file: remove dust nodes ──
-  const collapseFile = useCallback(
-    (fileId: string) => {
-      const g = graphRef.current;
-      const s = sigmaRef.current;
-      if (!g || !s) return;
-
-      const dustPrefix = `dust-`;
-      const toRemove: string[] = [];
-      g.forEachNode((nodeId) => {
-        if (nodeId.startsWith(dustPrefix)) {
-          // Check if this dust is connected to fileId
-          const edges = g.edges(nodeId);
-          for (const e of edges) {
-            const src = g.source(e);
-            const tgt = g.target(e);
-            if (src === fileId || tgt === fileId) {
-              toRemove.push(nodeId);
-              break;
-            }
+    // BFS depth from root
+    const depths = new Map<string, number>();
+    if (rootId) {
+      const queue = [rootId];
+      depths.set(rootId, 0);
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        const d = depths.get(cur)!;
+        for (const child of childMap.get(cur) || []) {
+          if (!depths.has(child)) {
+            depths.set(child, d + 1);
+            queue.push(child);
           }
         }
-      });
-
-      for (const nid of toRemove) {
-        g.dropNode(nid);
-      }
-
-      expandedFilesRef.current.delete(fileId);
-      s.refresh();
-    },
-    [],
-  );
-
-  // ── Expand / Collapse all ──
-  const handleExpandAll = useCallback(() => {
-    if (!layout) return;
-    for (const [nodeId, ring] of layout.ringMap) {
-      if ((ring === 1 || ring === 2) && (layout.childMap.get(nodeId)?.length ?? 0) > 0) {
-        expandDir(nodeId);
       }
     }
-  }, [layout, expandDir]);
 
-  const handleCollapseAll = useCallback(() => {
-    // Collapse files first (removes dust), then dirs
-    const filesToCollapse = new Set(expandedFilesRef.current);
-    for (const fid of filesToCollapse) collapseFile(fid);
+    // Add all nodes with random initial scatter around center
+    for (const n of graphData.nodes) {
+      const depth = depths.get(n.id) ?? 1;
+      const color = getNodeColor(n.kind ?? null, depth, n.extension);
+      const nodeSize = getNodeSize(n.kind ?? null, depth);
+      const scatterR = 30 + Math.random() * 180;
+      const scatterA = Math.random() * 2 * Math.PI;
 
-    const dirsToCollapse = new Set(expandedDirsRef.current);
-    for (const did of dirsToCollapse) collapseDir(did);
-  }, [collapseDir, collapseFile]);
+      g.addNode(n.id, {
+        x: scatterR * Math.cos(scatterA),
+        y: scatterR * Math.sin(scatterA),
+        label: n.label,
+        path: n.path,
+        kind: n.kind ?? null,
+        depth,
+        color,
+        nodeSize,
+        extension: n.extension,
+        size: n.size,
+      });
+    }
 
-  // ── Main init effect ──
+    // Add all edges
+    for (const e of graphData.edges) {
+      if (g.hasNode(e.source) && g.hasNode(e.target)) {
+        g.addEdgeWithKey(e.id, e.source, e.target, {});
+      }
+    }
+
+    // ── Run ForceAtlas2 ──
+    try {
+      forceAtlas2.assign(g, {
+        iterations: 300,
+        settings: {
+          gravity: 5,
+          scalingRatio: 1.5,
+          slowDown: 3,
+          barnesHutOptimize: true,
+          strongGravityMode: true,
+          outboundAttractionDistribution: true,
+        },
+      });
+    } catch (err) {
+      console.error("[Graph] ForceAtlas2 failed:", err);
+      // Continue with random positions
+    }
+
+    // ── Assign edge color tiers based on midpoint distance from center ──
+    const dists: number[] = [];
+    g.forEachEdge((_e, _a, s, t) => {
+      const sx = (g.getNodeAttribute(s, "x") as number) ?? 0;
+      const sy = (g.getNodeAttribute(s, "y") as number) ?? 0;
+      const tx = (g.getNodeAttribute(t, "x") as number) ?? 0;
+      const ty = (g.getNodeAttribute(t, "y") as number) ?? 0;
+      dists.push(Math.sqrt(((sx + tx) / 2) ** 2 + ((sy + ty) / 2) ** 2));
+    });
+    dists.sort((a, b) => a - b);
+    const t1 = dists[Math.floor(dists.length * 0.33)] ?? 0;
+    const t2 = dists[Math.floor(dists.length * 0.66)] ?? 0;
+
+    g.forEachEdge((e, _a, s, t) => {
+      const sx = (g.getNodeAttribute(s, "x") as number) ?? 0;
+      const sy = (g.getNodeAttribute(s, "y") as number) ?? 0;
+      const tx = (g.getNodeAttribute(t, "x") as number) ?? 0;
+      const ty = (g.getNodeAttribute(t, "y") as number) ?? 0;
+      const midDist = Math.sqrt(((sx + tx) / 2) ** 2 + ((sy + ty) / 2) ** 2);
+      g.setEdgeAttribute(e, "colorTier", midDist <= t1 ? 0 : midDist <= t2 ? 1 : 2);
+    });
+
+    return g;
+  }, [graphData]);
+
+  // Derived counts
+  const nodeCount = internalGraph?.order ?? 0;
+  const edgeCount = internalGraph?.size ?? 0;
+
+  // ── Sigma init ──
   useEffect(() => {
-    if (!layout || !containerRef.current || !graphData) return;
+    if (!internalGraph || !containerRef.current) return;
 
-    // Cleanup
+    // Cleanup previous instance
     if (sigmaRef.current) {
       sigmaRef.current.kill();
       sigmaRef.current = null;
     }
+    highlightedNodeRef.current = null;
 
-    expandedDirsRef.current = new Set();
-    expandedFilesRef.current = new Set();
-    dustCacheRef.current = new Map();
-
-    const g = new Graph({
-      multi: false,
-      type: "directed",
-      allowSelfLoops: false,
-    });
-
-    // Add Star + Planet + Moon nodes (rings 0-2)
-    for (const [nodeId, pos] of layout.positions) {
-      const nd = nodeMap.get(nodeId);
-      if (!nd) continue;
-      const ring = layout.ringMap.get(nodeId) ?? 0;
-      if (ring > 2) continue; // skip files & dust initially
-
-      const nodeType = getNodeTypeByRing(ring);
-      const color =
-        ring === 0
-          ? NODE_COLORS.star
-          : ring === 1
-            ? NODE_COLORS.planet
-            : NODE_COLORS.moon;
-      const size =
-        ring === 0
-          ? NODE_SIZES.star
-          : ring === 1
-            ? NODE_SIZES.planet
-            : NODE_SIZES.moon;
-      const hasKids = (layout.childMap.get(nodeId)?.length ?? 0) > 0;
-
-      g.addNode(nodeId, {
-        x: pos.x,
-        y: pos.y,
-        label: nd.label,
-        path: nd.path,
-        kind: nd.kind ?? null,
-        ring,
-        nodeType,
-        color,
-        nodeSize: size,
-        hasChildren: hasKids,
-        hidden: false,
-      });
-    }
-
-    // Add edges for visible nodes (both endpoints visible)
-    for (const e of graphData.edges) {
-      if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
-      const sRing = layout.ringMap.get(e.source) ?? 0;
-      const tRing = layout.ringMap.get(e.target) ?? 0;
-      const er = getEdgeRing(sRing, tRing);
-      g.addEdgeWithKey(e.id, e.source, e.target, { edgeRing: er });
-    }
-
-    // ── Validate all nodes have positions ──
-    let missingPositions = 0;
-    g.forEachNode((node) => {
-      const attrs = g.getNodeAttributes(node) as Record<string, unknown>;
-      if (typeof attrs.x !== "number" || typeof attrs.y !== "number" || isNaN(attrs.x) || isNaN(attrs.y)) {
-        missingPositions++;
-        g.setNodeAttribute(node, "x", 0);
-        g.setNodeAttribute(node, "y", 0);
-        console.warn("[Graph] Node missing position, defaulting to (0,0):", node, attrs);
-      }
-    });
-    if (missingPositions > 0) {
-      console.warn(`[Graph] ${missingPositions} nodes had missing positions, fixed`);
-    }
-
-    // ── Container size guard ──
+    // Container size guard
     const rect = containerRef.current.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
-      console.warn("[Graph] Container has zero dimensions, skipping Sigma init");
-      setInitError("Container has zero dimensions — is the canvas visible?");
-      graphRef.current = g; // keep graphology ref for cleanup
+      console.warn("[Graph] Zero-dimension container, skipping Sigma init");
       return;
     }
 
-    // ── Sigma WebGL renderer ──
     let s: Sigma;
     try {
-      s = new Sigma(g, containerRef.current, {
+      s = new Sigma(internalGraph, containerRef.current, {
         allowInvalidContainer: true,
-        stagePadding: 40,
-      renderLabels: false,
-      renderEdgeLabels: false,
-      enableEdgeEvents: false,
-      labelFont: "Georgia, system-ui, sans-serif",
-      labelSize: 9,
-      labelDensity: 0.25,
-      labelRenderedSizeThreshold: 3,
-      minCameraRatio: 0.02,
-      maxCameraRatio: 14,
-      defaultNodeColor: "#555",
-      defaultEdgeColor: ORBIT_COLOR,
-      autoRescale: true,
-      autoCenter: true,
+        renderLabels: false,
+        renderEdgeLabels: false,
+        enableEdgeEvents: false,
+        labelFont: "system-ui, sans-serif",
+        labelSize: 10,
+        labelRenderedSizeThreshold: 6,
+        minCameraRatio: 0.02,
+        maxCameraRatio: 14,
+        defaultNodeColor: "#a0a0c0",
+        defaultEdgeColor: EDGE_COLORS[0],
+        autoRescale: true,
+        autoCenter: true,
 
-      nodeReducer: (_node, data) => {
-        const nd = data as unknown as GraphNodeAttr;
-        return {
-          ...nd,
-          label: "",
-          size: nd.nodeSize || 5,
-          color: nd.color || "#666",
-        };
-      },
+        nodeReducer: (_node, data) => {
+          const d = data as Record<string, unknown>;
+          const isHL = highlightedNodeRef.current === _node;
+          return {
+            label: "",
+            size: isHL ? ((d.nodeSize as number) || 6) * 1.8 : ((d.nodeSize as number) || 6),
+            color: isHL ? "#ffffff" : ((d.color as string) || "#a0a0c0"),
+          };
+        },
 
-      edgeReducer: (_edge, data) => {
-        const edgeRing = (data as { edgeRing?: number }).edgeRing ?? 2;
-        return {
-          size: EDGE_THICKNESS[edgeRing] ?? 0.3,
-          color: ORBIT_COLOR,
-        };
-      },
-    });
+        edgeReducer: (_edge, data) => {
+          const tier = (data as { colorTier?: number }).colorTier ?? 0;
+          return {
+            color: EDGE_COLORS[tier] ?? EDGE_COLORS[0],
+            size: 0.3,
+          };
+        },
+      });
     } catch (err: any) {
       console.error("[Graph] Sigma init failed:", err);
-      setInitError(err?.message ?? "Unknown Sigma initialization error");
-      graphRef.current = g;
       return;
     }
 
-    // ── Events ──
-
-    // Label visibility toggle on zoom
-    const updateLabelVisibility = () => {
-      const ratio = s.getCamera().getState().ratio;
-      if (ratio > LABEL_ZOOM_THRESHOLD) {
-        if (!s.getSetting("renderLabels")) {
-          try { s.setSetting("renderLabels", true); } catch { /* ok */ }
-          setLabelsVisible(true);
-        }
-      } else {
-        if (s.getSetting("renderLabels")) {
-          try { s.setSetting("renderLabels", false); } catch { /* ok */ }
-          setLabelsVisible(false);
-        }
-      }
-    };
-    s.on("wheelStage", updateLabelVisibility);
-    s.on("moveBody", updateLabelVisibility);
-
-    // Tooltip
+    // ── Tooltip on hover ──
     s.on("enterNode", ({ node }) => {
       try {
-        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
-        const pos = s.graphToViewport({ x: nd.x as number ?? 0, y: nd.y as number ?? 0 });
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (!rect) return;
+        const nd = internalGraph.getNodeAttributes(node) as Record<string, unknown>;
+        const nx = (nd.x as number) ?? 0;
+        const ny = (nd.y as number) ?? 0;
+        const pos = s.graphToViewport({ x: nx, y: ny });
+        const crect = containerRef.current?.getBoundingClientRect();
+        if (!crect) return;
 
-        let kindLabel = "";
-        const nt = nd.nodeType;
-        if (nt === "star") kindLabel = "Project Root";
-        else if (nt === "planet") {
-          kindLabel = nd.hasChildren ? "Directory · click to explore" : "Directory";
-        } else if (nt === "moon") {
-          kindLabel = nd.hasChildren ? "Sub-directory · click to explore" : "Sub-directory";
-        } else if (nt === "satellite") {
-          kindLabel = "File · double-click for diff";
-          if (expandedFilesRef.current.has(node)) kindLabel += " · dust visible";
-        } else if (nt === "dust") {
-          kindLabel = nd.changeKind
-            ? `Change · ${nd.changeKind} @ ${shortTimestamp(nd.changeTimestamp ?? "")}`
-            : "Change record";
-        }
+        const kindLabel = nd.kind === "file"
+          ? `File${nd.extension ? ` .${nd.extension}` : ""}`
+          : `Directory`;
 
         setTooltip({
           visible: true,
-          x: pos.x + rect.left + 14,
-          y: pos.y + rect.top - 48,
-          label: nd.label,
-          path: nd.path,
+          x: pos.x + crect.left + 14,
+          y: pos.y + crect.top - 48,
+          label: (nd.label as string) || "",
+          path: (nd.path as string) || "",
           kind: kindLabel,
-          size: nt === "satellite" ? formatSize(nd.size) : "",
+          size: nd.kind === "file" ? formatSize(nd.size as number | undefined) : "",
         });
-      } catch { /* node may have been removed */ }
+      } catch { /* node removed */ }
     });
 
     s.on("leaveNode", () => {
       setTooltip((prev) => ({ ...prev, visible: false }));
     });
 
-    // ── Click: expand planet/moon or show dust for satellite ──
+    // ── Click node → highlight ──
     s.on("clickNode", ({ node }) => {
-      try {
-        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
-        const ring = nd.ring;
-
-        if (ring === 1 || ring === 2) {
-          // Planet or Moon → toggle expand
-          if (expandedDirsRef.current.has(node)) {
-            collapseDir(node);
-          } else {
-            expandDir(node);
-            // Animate camera to zoom on this planet
-            const x = nd.x as number ?? 0;
-            const y = nd.y as number ?? 0;
-            s.getCamera().animate({ x, y, ratio: 0.8 }, { duration: 400 });
-          }
-        } else if (ring === 3) {
-          // Satellite → toggle dust
-          if (expandedFilesRef.current.has(node)) {
-            collapseFile(node);
-          } else {
-            expandFile(node);
-          }
-        }
-      } catch { /* node may have been removed */ }
+      if (highlightedNodeRef.current === node) {
+        highlightedNodeRef.current = null;
+      } else {
+        highlightedNodeRef.current = node;
+      }
+      s.refresh();
     });
 
-    // ── Double-click: collapse or diff preview ──
-    s.on("doubleClickNode", ({ node }) => {
-      try {
-        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
-        const ring = nd.ring;
-
-        if (ring === 1 || ring === 2) {
-          if (expandedDirsRef.current.has(node)) {
-            collapseDir(node);
-          }
-        } else if (ring === 3) {
-          // Double-click file → log path for diff (placeholder)
-          console.log("[CodeObservatory] Diff view reserved for:", nd.path);
-          if (expandedFilesRef.current.has(node)) {
-            collapseFile(node);
-          }
-        }
-      } catch { /* ok */ }
-    });
-
-    // ── Click stage → reset camera to root ──
+    // ── Click stage → clear highlight ──
     s.on("clickStage", () => {
-      // No-op; user can use Root button
+      if (highlightedNodeRef.current !== null) {
+        highlightedNodeRef.current = null;
+        s.refresh();
+      }
     });
 
-    // Fit to screen
-    setTimeout(() => s.getCamera().animatedReset({ duration: 300 }), 100);
+    // ── Node drag (forceatlas2-compatible) ──
+    let draggedNode: string | null = null;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    s.on("downNode", ({ node, event }) => {
+      draggedNode = node;
+      const crect = containerRef.current?.getBoundingClientRect();
+      if (crect) {
+        dragStartX = event.x - crect.left;
+        dragStartY = event.y - crect.top;
+      }
+    });
+
+    s.on("moveBody", ({ event }) => {
+      if (!draggedNode || !internalGraph) return;
+      const crect = containerRef.current?.getBoundingClientRect();
+      if (!crect) return;
+      const mouseX = event.x - crect.left;
+      const mouseY = event.y - crect.top;
+      if (Math.abs(mouseX - dragStartX) < 2 && Math.abs(mouseY - dragStartY) < 2) return;
+
+      const pos = s.viewportToGraph({ x: mouseX, y: mouseY });
+      internalGraph.setNodeAttribute(draggedNode, "x", pos.x);
+      internalGraph.setNodeAttribute(draggedNode, "y", pos.y);
+      s.refresh();
+    });
+
+    const stopDrag = () => {
+      draggedNode = null;
+    };
+    s.on("upNode", stopDrag);
+    s.on("upStage", stopDrag);
+
+    // Fit to screen on first render
+    setTimeout(() => {
+      s.getCamera().animatedReset({ duration: 400 });
+      setLayoutDone(true);
+    }, 150);
 
     sigmaRef.current = s;
-    graphRef.current = g;
 
     return () => {
-      if (sigmaRef.current) {
-        sigmaRef.current.kill();
-        sigmaRef.current = null;
-      }
+      s.kill();
+      sigmaRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout]);
+  }, [internalGraph]);
 
   // ── Toolbar handlers ──
   const handleFit = useCallback(() => {
     sigmaRef.current?.getCamera().animatedReset({ duration: 300 });
   }, []);
 
-  const handleRoot = useCallback(() => {
-    const s = sigmaRef.current;
-    if (!s) return;
-    s.getCamera().animate({ x: 0, y: 0, ratio: 1 }, { duration: 500 });
-  }, []);
+  const handleRescan = useCallback(() => {
+    highlightedNodeRef.current = null;
+    refresh();
+  }, [refresh]);
 
   return (
-    <div className="flex flex-col h-full co-graph-bg">
+    <div className="flex flex-col h-full" style={{ background: "#000000" }}>
       {/* ── Toolbar ── */}
-      <div className="co-graph-toolbar">
-        <div className="co-graph-toolbar-left">
-          {/* Star count */}
-          <span className="co-graph-badge co-graph-badge-star">
-            <svg width="8" height="8" viewBox="0 0 8 8">
-              <circle cx="4" cy="4" r="3.5" fill={NODE_COLORS.star} />
-            </svg>
-            {starCount}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          height: 40,
+          padding: "0 12px",
+          background: "rgba(255,255,255,0.03)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}
+      >
+        {/* Left: node / edge counts */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span
+            style={{
+              fontSize: 12,
+              color: "rgba(255,255,255,0.5)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {layoutDone ? (
+              <>
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{nodeCount}</span> nodes{"  "}
+                <span style={{ color: "rgba(255,255,255,0.7)" }}>{edgeCount}</span> edges
+              </>
+            ) : (
+              "Computing layout…"
+            )}
           </span>
-          {/* Planet count */}
-          <span className="co-graph-badge co-graph-badge-planet">
-            <svg width="7" height="7" viewBox="0 0 7 7">
-              <circle cx="3.5" cy="3.5" r="3" fill={NODE_COLORS.planet} />
-            </svg>
-            {planetCount}
-          </span>
-          {/* Moon count */}
-          <span className="co-graph-badge co-graph-badge-moon">
-            <svg width="5" height="5" viewBox="0 0 5 5">
-              <circle cx="2.5" cy="2.5" r="2" fill={NODE_COLORS.moon} />
-            </svg>
-            {moonCount}
-          </span>
-          {/* File count */}
-          <span className="co-graph-badge">{fileCount} files</span>
-          {/* Expanded count */}
-          {expandedDirsRef.current.size > 0 && (
-            <span className="co-graph-badge" style={{ color: "var(--co-accent-text)" }}>
-              {expandedDirsRef.current.size} expanded
-            </span>
-          )}
-          {labelsVisible && (
-            <span className="co-graph-badge" style={{ color: "var(--co-text-muted)" }}>
-              labels
-            </span>
-          )}
         </div>
 
-        <div className="co-graph-toolbar-right">
+        {/* Right: Fit / Rescan */}
+        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <button
-            className="co-graph-icon-btn"
-            onClick={handleExpandAll}
-            title="Expand all directories (show files)"
+            onClick={handleFit}
+            title="Fit to screen"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              border: "none",
+              borderRadius: 4,
+              background: "transparent",
+              color: "rgba(255,255,255,0.4)",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+              e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+            }}
           >
-            <ChevronDown size={14} />
-          </button>
-          <button
-            className="co-graph-icon-btn"
-            onClick={handleCollapseAll}
-            title="Collapse all (hide files & dust)"
-          >
-            <ChevronUp size={14} />
-          </button>
-          <button className="co-graph-icon-btn" onClick={handleRoot} title="Return to root (Star)">
-            <Home size={13} />
-          </button>
-          <button className="co-graph-icon-btn" onClick={handleFit} title="Fit to screen">
             <Maximize2 size={13} />
           </button>
-          <button className="co-graph-icon-btn" onClick={refresh} disabled={loading} title="Rescan project">
+          <button
+            onClick={handleRescan}
+            disabled={loading}
+            title="Rescan project"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 26,
+              height: 26,
+              border: "none",
+              borderRadius: 4,
+              background: "transparent",
+              color: "rgba(255,255,255,0.4)",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.3 : 1,
+            }}
+            onMouseEnter={(e) => {
+              if (!loading) {
+                e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+            }}
+          >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
       {/* ── Canvas ── */}
-      <div className="co-graph-canvas-wrapper">
+      <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
         {loading && !graphData ? (
-          <div className="co-graph-loading">
-            <div className="co-graph-loading-spinner" />
-            <p className="co-graph-loading-text">Scanning project...</p>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                border: "2px solid rgba(255,255,255,0.08)",
+                borderTopColor: "rgba(255,255,255,0.5)",
+                animation: "co-spin 0.7s linear infinite",
+              }}
+            />
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.3)" }}>Scanning project...</p>
           </div>
         ) : graphData && graphData.nodes.length === 0 ? (
-          <div className="co-graph-empty">
-            <p className="co-graph-empty-title">Empty Project</p>
-            <p className="co-graph-empty-desc">
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+              Empty Project
+            </p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.2)" }}>
               This directory contains no files or folders.
             </p>
           </div>
-        ) : initError ? (
-          <div className="co-graph-empty">
-            <p className="co-graph-empty-title">Graph Initialization Error</p>
-            <p className="co-graph-empty-desc">{initError}</p>
-          </div>
         ) : !projectPath ? (
-          <div className="co-graph-empty">
-            <p className="co-graph-empty-title">No Project</p>
-            <p className="co-graph-empty-desc">
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
+              No Project
+            </p>
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.2)" }}>
               Open a project to visualize its galaxy graph.
             </p>
           </div>
         ) : (
-          <div ref={containerRef} className="co-graph-sigma-container" />
+          <div
+            ref={containerRef}
+            style={{ position: "absolute", inset: 0, zIndex: 1 }}
+          />
         )}
 
         {/* Tooltip */}
         {tooltip.visible && (
-          <div className="co-graph-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
-            <div className="co-graph-tooltip-label">{tooltip.label}</div>
-            <div className="co-graph-tooltip-meta">
+          <div
+            style={{
+              position: "absolute",
+              zIndex: 50,
+              left: tooltip.x,
+              top: tooltip.y,
+              padding: "6px 10px",
+              borderRadius: 4,
+              background: "rgba(20,20,30,0.92)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              pointerEvents: "none",
+              maxWidth: 300,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.85)" }}>
+              {tooltip.label}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "rgba(255,255,255,0.4)",
+                display: "flex",
+                gap: 4,
+                marginTop: 1,
+              }}
+            >
               <span>{tooltip.kind}</span>
               {tooltip.size && <span>· {tooltip.size}</span>}
             </div>
-            <div className="co-graph-tooltip-path">{tooltip.path}</div>
+            <div
+              style={{
+                fontSize: 9,
+                fontFamily: "monospace",
+                color: "rgba(255,255,255,0.25)",
+                marginTop: 1,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {tooltip.path}
+            </div>
           </div>
         )}
       </div>
