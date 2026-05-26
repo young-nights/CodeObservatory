@@ -79,6 +79,25 @@ const SKIP_DIRS: &[&str] = &[
     ".env",
     ".pytest_cache",
     ".mypy_cache",
+    "__MACOSX",
+    "Thumbs.db",
+];
+
+/// Directory suffixes to skip (e.g., "*.egg-info")
+const SKIP_DIR_SUFFIXES: &[&str] = &[
+    ".egg-info",
+];
+
+/// Filename substrings to skip for files
+const SKIP_FILE_CONTAINS: &[&str] = &[
+    ".min.",   // *.min.js, *.min.css 等压缩版
+];
+
+/// Filenames to skip even if extension matches
+const SKIP_FILENAMES: &[&str] = &[
+    "package-lock.json",
+    "Cargo.lock",
+    "yarn.lock",
 ];
 
 /// File extensions we want to track (whitelist — source code + docs)
@@ -167,6 +186,18 @@ pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<Gr
 /// Determine whether a file should be included in the graph based on its extension
 /// and special filenames (whitelist approach — only source code + docs).
 fn should_track_file(name: &str, ext: &Option<String>) -> bool {
+    // Skip files with known skip substrings (e.g., *.min.js, *.min.css)
+    for pattern in SKIP_FILE_CONTAINS {
+        if name.contains(pattern) {
+            return false;
+        }
+    }
+
+    // Skip known lock/config files
+    if SKIP_FILENAMES.contains(&name) {
+        return false;
+    }
+
     // Special filenames without extensions (e.g. Dockerfile, Makefile, .gitignore)
     if SPECIAL_FILENAMES.contains(&name) {
         return true;
@@ -213,6 +244,11 @@ fn walk_dir(
         if file_type.is_dir() {
             // Skip known noise directories (includes dot-prefixed like .git, .vscode)
             if SKIP_DIRS.contains(&name_str.as_str()) || name_str.starts_with('.') {
+                continue;
+            }
+            // Skip directories with known suffixes (e.g., *.egg-info)
+            let skip_by_suffix = SKIP_DIR_SUFFIXES.iter().any(|suffix| name_str.ends_with(suffix));
+            if skip_by_suffix {
                 continue;
             }
 
