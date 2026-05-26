@@ -690,9 +690,14 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
 // DEFAULT SETTINGS
 // ══════════════════════════════════════════════════════════
 const DEFS: GalaxySettings = {
-  nodeSize: 0.8,
-  edgeOpacity: 0.15,
-  bloomStrength: 2.5,
+  nodeSize: 1.2,
+  edgeOpacity: 0.05,
+  bloomStrength: 0.5,
+  chargeStrength: -200,
+  linkDistance: 8,
+  linkStrength: 0.4,
+  centerGravity: 0.5,
+};
   chargeStrength: -400,
   linkDistance: 4,
   linkStrength: 0.7,

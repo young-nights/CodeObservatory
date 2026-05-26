@@ -253,7 +253,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       label={t("settings.edgeOpacity")}
                       value={settings.edgeOpacity}
                       min={0.02}
-                      max={0.5}
+                      max={0.1}
                       step={0.01}
                       onChange={(v) => set("edgeOpacity", v)}
                       isDark={isDark}
@@ -261,8 +261,8 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                     <SliderControl
                       label={t("settings.bloom")}
                       value={settings.bloomStrength}
-                      min={0.3}
-                      max={3}
+                      min={0.1}
+                      max={1.0}
                       step={0.1}
                       onChange={(v) => set("bloomStrength", v)}
                       isDark={isDark}
