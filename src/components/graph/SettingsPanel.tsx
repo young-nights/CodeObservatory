@@ -344,7 +344,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       }}
                     >
                       <RotateCcw size={11} />
-                      Reset to Defaults
+                      {t("settings.reset")}
                     </button>
                   </div>
                 </div>
@@ -370,7 +370,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
               className="hover:underline"
               style={{ color: accentColor }}
             >
-              Close
+              {t("settings.close")}
             </button>
           </div>
         </motion.div>
