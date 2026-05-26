@@ -1,5 +1,5 @@
-// AppShell — Sci-fi layout shell with framer-motion page transitions
-// Cursor + Arc + Linear inspired minimal design
+// AppShell — 100% inline styles, zero Tailwind
+// Guaranteed rendering on Windows with dark/light theme support
 
 import { type ReactNode, createContext, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -9,7 +9,7 @@ import { TopBar } from "./TopBar";
 
 export const SidebarContext = createContext({ collapsed: false });
 
-const STORAGE_KEY = "co-sidebar-collapsed";
+const KEY = "co-sidebar-collapsed";
 
 interface AppShellProps {
   activeTab: string;
@@ -19,56 +19,26 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-export function AppShell({
-  activeTab,
-  onTabChange,
-  projectName,
-  watcherRunning,
-  children,
-}: AppShellProps) {
+export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch { return false; }
+    try { return localStorage.getItem(KEY) === "1"; } catch { return false; }
   });
-
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const shellBg = isDark ? "#08080c" : "#f5f5f7";
-  const mainBg = isDark ? "#000011" : "#f0f0f5";
 
   const handleToggle = useCallback(() => {
-    setCollapsed((v) => {
-      const next = !v;
-      localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
-      return next;
-    });
+    setCollapsed((v) => { const n = !v; try { localStorage.setItem(KEY, n ? "1" : "0"); } catch {} return n; });
   }, []);
 
   return (
     <SidebarContext.Provider value={{ collapsed }}>
-      <div className="flex h-screen overflow-hidden" style={{ background: shellBg }}>
-        <Sidebar
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          collapsed={collapsed}
-          onToggle={handleToggle}
-        />
-        <div className="flex-1 flex flex-col min-w-0">
-          <TopBar
-            projectName={projectName}
-            watcherRunning={watcherRunning}
-            collapsed={collapsed}
-            onExpand={() => setCollapsed(false)}
-          />
-          <main className="flex-1 overflow-hidden" style={{ background: mainBg }}>
+      <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: isDark ? "#08080c" : "#f5f5f7" }}>
+        <Sidebar activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} onToggle={handleToggle} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <TopBar projectName={projectName} watcherRunning={watcherRunning} collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+          <main style={{ flex: 1, overflow: "hidden", background: isDark ? "#05050f" : "#f0f0f5" }}>
             <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, scale: 0.995 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.995 }}
-                transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-                className="h-full"
-              >
+              <motion.div key={activeTab} initial={{ opacity: 0, scale: 0.995 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.995 }} transition={{ duration: 0.15 }} style={{ height: "100%" }}>
                 {children}
               </motion.div>
             </AnimatePresence>
