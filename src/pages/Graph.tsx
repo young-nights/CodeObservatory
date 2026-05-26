@@ -1,45 +1,39 @@
 // Graph — Precision Instrument core visualization
-// OKLCH node colors · 0.3px edges · neighborhood highlight dimming
-// Progressive rendering: dir nodes initial, file nodes on expand/collapse
-// No gradient · no texture · no neon
+// Sigma.js WebGL renderer + graphology data graph
+// OKLCH node colors · 0.3px edges · progressive expand/collapse
+// N-body force simulation for layout
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import cytoscape, {
-  type Core,
-  type EventObject,
-  type ElementDefinition,
-} from "cytoscape";
+import Sigma from "sigma";
+import Graph from "graphology";
+import type { Attributes } from "graphology-types";
 import { useScanGraph } from "@/hooks/useObservatory";
-import type { GraphData, FileNode, FileEdge } from "@/lib/types";
-import {
-  RefreshCw,
-  Maximize2,
-  GitBranch,
-  Network,
-} from "lucide-react";
+import type { GraphData, FileNode } from "@/lib/types";
+import { RefreshCw, Maximize2, Zap } from "lucide-react";
+import { createForceSimulation } from "@/lib/forceSimulation";
 
 // ── Node colors in OKLCH ──
 const NODE_COLORS: Record<string, string> = {
   dir: "oklch(70% 0.15 85)",
-  ts: "oklch(65% 0.15 255)",
-  tsx: "oklch(65% 0.15 255)",
-  js: "oklch(65% 0.15 255)",
-  jsx: "oklch(65% 0.15 255)",
-  rs: "oklch(60% 0.18 20)",
-  md: "oklch(60% 0.12 300)",
-  json: "oklch(70% 0.15 85)",
-  toml: "oklch(70% 0.15 85)",
-  yaml: "oklch(70% 0.15 85)",
-  yml: "oklch(70% 0.15 85)",
-  css: "oklch(65% 0.15 255)",
-  html: "oklch(65% 0.15 255)",
-  scss: "oklch(65% 0.15 255)",
-  c: "oklch(50% 0.05 260)",
-  h: "oklch(50% 0.05 260)",
-  cpp: "oklch(50% 0.05 260)",
-  hpp: "oklch(50% 0.05 260)",
-  py: "oklch(65% 0.15 255)",
-  default: "oklch(50% 0.05 260)",
+  ts: "oklch(60% 0.16 250)",
+  tsx: "oklch(60% 0.16 250)",
+  js: "oklch(60% 0.16 250)",
+  jsx: "oklch(60% 0.16 250)",
+  rs: "oklch(58% 0.17 20)",
+  md: "oklch(58% 0.11 300)",
+  json: "oklch(65% 0.12 95)",
+  toml: "oklch(65% 0.12 95)",
+  yaml: "oklch(65% 0.12 95)",
+  yml: "oklch(65% 0.12 95)",
+  css: "oklch(58% 0.12 155)",
+  html: "oklch(58% 0.12 155)",
+  scss: "oklch(58% 0.12 155)",
+  c: "oklch(55% 0.02 260)",
+  h: "oklch(55% 0.02 260)",
+  cpp: "oklch(55% 0.02 260)",
+  hpp: "oklch(55% 0.02 260)",
+  py: "oklch(58% 0.1 195)",
+  default: "oklch(55% 0.02 260)",
 };
 
 function getNodeColor(node: FileNode): string {
@@ -50,10 +44,7 @@ function getNodeColor(node: FileNode): string {
 }
 
 function getNodeSize(kind: string, hasChildren: boolean): number {
-  if (kind === "dir") {
-    return hasChildren ? 14 : 10;
-  }
-  return 8;
+  return kind === "dir" ? (hasChildren ? 5 : 4) : 3;
 }
 
 function formatSize(bytes?: number): string {
@@ -64,61 +55,75 @@ function formatSize(bytes?: number): string {
 }
 
 // ── Thresholds ──
-const LABEL_ZOOM_THRESHOLD = 2.0; // Increased from 1.5 for perf
-const LARGE_GRAPH_NODES = 300; // Hide labels above this count
-const VERY_LARGE_GRAPH = 800; // Force dir-only above this
-const HUGE_GRAPH = 1500; // Show warning
+const LABEL_ZOOM_THRESHOLD = 2.0;
+const FORCE_MAX_ITER = 300;
+const FORCE_LOCAL_ITER = 60;
 
 // ── Graph Layers Pre-processing ──
+interface NodeDef {
+  id: string;
+  label: string;
+  path: string;
+  kind: "dir" | "file";
+  extension?: string;
+  size?: number;
+  modified?: string;
+  color: string;
+  nodeSize: number;
+  hasChildren: boolean;
+  truncated: boolean;
+}
+
+interface EdgeDef {
+  id: string;
+  source: string;
+  target: string;
+}
+
 interface GraphLayers {
-  dirElements: ElementDefinition[];
-  childMap: Map<string, { fileNodes: ElementDefinition[]; fileEdges: ElementDefinition[] }>;
-  parentMap: Map<string, string>; // dirId → parentDirId
+  dirNodes: NodeDef[];
+  dirEdges: EdgeDef[];
+  childMap: Map<string, { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }>;
+  parentMap: Map<string, string>;
   totalNodeCount: number;
-  hasChildrenSet: Set<string>;
   truncatedDirs: Set<string>;
 }
 
 function buildGraphLayers(data: GraphData): GraphLayers {
   const nodeMap = new Map<string, FileNode>();
-  const dirElements: ElementDefinition[] = [];
+  const hasChildrenSet = new Set<string>();
+  const parentMap = new Map<string, string>();
+  const truncatedDirs = new Set<string>();
+  const dirNodes: NodeDef[] = [];
+  const dirEdges: EdgeDef[] = [];
   const childMap = new Map<
     string,
-    { fileNodes: ElementDefinition[]; fileEdges: ElementDefinition[] }
+    { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }
   >();
-  const parentMap = new Map<string, string>();
-  const hasChildrenSet = new Set<string>();
-  const truncatedDirs = new Set<string>();
 
-  // Build node lookup
   for (const n of data.nodes) {
     nodeMap.set(n.id, n);
     if (n.truncated) truncatedDirs.add(n.id);
   }
 
-  // First pass: identify which dirs have children (from edges)
   for (const e of data.edges) {
     hasChildrenSet.add(e.source);
     parentMap.set(e.target, e.source);
   }
 
-  // Add dir nodes to initial elements
+  // Dir nodes → initial elements
   for (const n of data.nodes) {
     if (n.kind !== "dir") continue;
     const hasKids = hasChildrenSet.has(n.id);
-    const isTruncated = truncatedDirs.has(n.id);
-    dirElements.push({
-      data: {
-        id: n.id,
-        label: n.label,
-        path: n.path,
-        kind: "dir",
-        color: NODE_COLORS.dir,
-        nodeSize: getNodeSize("dir", hasKids),
-        hasChildren: hasKids,
-        truncated: isTruncated,
-      },
-      classes: isTruncated ? "truncated" : "",
+    dirNodes.push({
+      id: n.id,
+      label: n.label,
+      path: n.path,
+      kind: "dir",
+      color: NODE_COLORS.dir,
+      nodeSize: getNodeSize("dir", hasKids),
+      hasChildren: hasKids,
+      truncated: truncatedDirs.has(n.id),
     });
     childMap.set(n.id, { fileNodes: [], fileEdges: [] });
   }
@@ -127,24 +132,17 @@ function buildGraphLayers(data: GraphData): GraphLayers {
   for (const e of data.edges) {
     const targetNode = nodeMap.get(e.target);
     if (!targetNode) continue;
-
     if (targetNode.kind === "dir") {
-      // Dir→dir edge: always visible
-      dirElements.push({
-        data: { id: e.id, source: e.source, target: e.target },
-      });
+      dirEdges.push({ id: e.id, source: e.source, target: e.target });
     } else {
-      // Dir→file edge: hidden until parent dir is expanded
       const bucket = childMap.get(e.source);
       if (bucket) {
-        bucket.fileEdges.push({
-          data: { id: e.id, source: e.source, target: e.target },
-        });
+        bucket.fileEdges.push({ id: e.id, source: e.source, target: e.target });
       }
     }
   }
 
-  // Add file nodes to childMap (keyed by parent dir)
+  // File nodes → childMap
   for (const n of data.nodes) {
     if (n.kind !== "file") continue;
     const parentId = parentMap.get(n.id);
@@ -152,42 +150,35 @@ function buildGraphLayers(data: GraphData): GraphLayers {
     const bucket = childMap.get(parentId);
     if (!bucket) continue;
     bucket.fileNodes.push({
-      data: {
-        id: n.id,
-        label: n.label,
-        path: n.path,
-        kind: "file",
-        extension: n.extension,
-        size: n.size,
-        modified: n.modified,
-        color: getNodeColor(n),
-        nodeSize: getNodeSize("file", false),
-      },
+      id: n.id,
+      label: n.label,
+      path: n.path,
+      kind: "file",
+      extension: n.extension,
+      size: n.size,
+      modified: n.modified,
+      color: getNodeColor(n),
+      nodeSize: getNodeSize("file", false),
+      hasChildren: false,
+      truncated: false,
     });
   }
 
-  return {
-    dirElements,
-    childMap,
-    parentMap,
-    totalNodeCount: data.nodes.length,
-    hasChildrenSet,
-    truncatedDirs,
-  };
+  return { dirNodes, dirEdges, childMap, parentMap, totalNodeCount: data.nodes.length, truncatedDirs };
 }
 
-function isDescendant(
-  childId: string,
-  ancestorId: string,
-  parentMap: Map<string, string>,
-): boolean {
-  let current: string | undefined = childId;
-  while (current) {
-    if (current === ancestorId) return true;
-    current = parentMap.get(current);
-    if (!current) return false;
-  }
-  return false;
+// ── Graphology node attributes ──
+interface NodeAttr extends Attributes {
+  label: string;
+  path: string;
+  kind: "dir" | "file";
+  extension: string | null;
+  nodeSize: number;
+  color: string;
+  hasChildren: boolean;
+  truncated: boolean;
+  hidden: boolean;
+  forceLabel: boolean;
 }
 
 // ── Component ──
@@ -195,22 +186,17 @@ interface GraphPageProps {
   projectPath: string;
 }
 
-type LayoutName = "cose" | "breadthfirst";
-
 export function GraphPage({ projectPath }: GraphPageProps) {
-  const { graph, loading, refresh } = useScanGraph(projectPath);
+  const { graph: graphData, loading, refresh } = useScanGraph(projectPath);
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<Core | null>(null);
+  const sigmaRef = useRef<Sigma | null>(null);
+  const graphRef = useRef<Graph | null>(null);
+  const forceRef = useRef<ReturnType<typeof createForceSimulation> | null>(null);
+  const forceRafRef = useRef<number>(0);
   const expandedDirsRef = useRef<Set<string>>(new Set());
-  const addedNodesRef = useRef<Map<string, string[]>>(new Map());
-  const addedEdgesRef = useRef<Map<string, string[]>>(new Map());
-  const parentMapRef = useRef<Map<string, string>>(new Map());
-  const childMapRef = useRef<Map<string, { fileNodes: ElementDefinition[]; fileEdges: ElementDefinition[] }>>(new Map());
-  const totalNodeCountRef = useRef(0);
-  const toggleExpandRef = useRef<(dirId: string) => void>(() => {});
-  const labelsVisibleRef = useRef(false);
+  const childMapRef = useRef<Map<string, { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }>>(new Map());
+  const highlightRef = useRef<{ neighbors: Set<string> } | null>(null);
 
-  const [layoutName, setLayoutName] = useState<LayoutName>("cose");
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     x: number;
@@ -222,379 +208,347 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   }>({ visible: false, x: 0, y: 0, label: "", path: "", kind: "", size: "" });
   const [labelsVisible, setLabelsVisible] = useState(false);
 
-  // Pre-process graph into layers
+  // Pre-process layers
   const layers = useMemo(
-    () => (graph ? buildGraphLayers(graph) : null),
-    [graph],
+    () => (graphData ? buildGraphLayers(graphData) : null),
+    [graphData],
   );
 
-  const isHugeGraph = (layers?.totalNodeCount ?? 0) > HUGE_GRAPH;
-  const isVeryLarge = (layers?.totalNodeCount ?? 0) > VERY_LARGE_GRAPH;
-  const hideLabels = (layers?.totalNodeCount ?? 0) > LARGE_GRAPH_NODES;
+  const totalCount = layers?.totalNodeCount ?? 0;
+  const dirCount = graphData?.nodes.filter((n) => n.kind === "dir").length ?? 0;
+  const fileCount = graphData?.nodes.filter((n) => n.kind === "file").length ?? 0;
+  const edgeCount = graphData?.edges.length ?? 0;
+  const isVeryLarge = totalCount > 800;
+  const isHuge = totalCount > 1500;
 
-  // Keep ref in sync with state for event handlers
-  labelsVisibleRef.current = labelsVisible;
+  // ── Kill running force sim ──
+  const killForce = useCallback(() => {
+    if (forceRafRef.current) {
+      cancelAnimationFrame(forceRafRef.current);
+      forceRafRef.current = 0;
+    }
+    if (forceRef.current) {
+      forceRef.current.stop();
+      forceRef.current = null;
+    }
+  }, []);
 
-  // ── Expand/Collapse helpers ──
-  const collapseOne = useCallback((dirId: string) => {
-    const cy = cyRef.current;
-    if (!cy) return;
+  // ── Start force sim + sigma refresh loop ──
+  const startForce = useCallback(
+    (g: Graph, maxIter: number, opts?: { repulsion?: number; attraction?: number; gravity?: number; damping?: number }) => {
+      killForce();
+      const ctrl = createForceSimulation(g, {
+        repulsion: opts?.repulsion ?? 5000,
+        attraction: opts?.attraction ?? 0.005,
+        gravity: opts?.gravity ?? 0.01,
+        damping: opts?.damping ?? 0.85,
+        maxIterations: maxIter,
+        onEnd: () => {
+          sigmaRef.current?.refresh();
+        },
+      });
+      forceRef.current = ctrl;
+      ctrl.start();
 
-    const nIds = addedNodesRef.current.get(dirId);
-    const eIds = addedEdgesRef.current.get(dirId);
+      // Refresh sigma each animation frame while force runs
+      const loop = () => {
+        if (!ctrl.isRunning()) {
+          forceRafRef.current = 0;
+          return;
+        }
+        sigmaRef.current?.refresh();
+        forceRafRef.current = requestAnimationFrame(loop);
+      };
+      forceRafRef.current = requestAnimationFrame(loop);
+    },
+    [killForce],
+  );
 
-    const toRemove: string[] = [...(nIds ?? []), ...(eIds ?? [])];
-    if (toRemove.length === 0) {
+  // ── Collapse one dir ──
+  const collapseDir = useCallback(
+    (dirId: string, g: Graph) => {
+      const children = childMapRef.current.get(dirId);
+      if (!children) return;
+
+      for (const fn of children.fileNodes) {
+        if (g.hasNode(fn.id)) g.dropNode(fn.id);
+      }
+      for (const fe of children.fileEdges) {
+        if (g.hasEdge(fe.id)) g.dropEdge(fe.id);
+      }
       expandedDirsRef.current.delete(dirId);
-      return;
-    }
-
-    const els = cy.collection();
-    for (const id of toRemove) {
-      const el = cy.getElementById(id);
-      if (el.length) els.merge(el);
-    }
-
-    cy.batch(() => {
-      cy.remove(els);
-    });
-
-    addedNodesRef.current.delete(dirId);
-    addedEdgesRef.current.delete(dirId);
-    expandedDirsRef.current.delete(dirId);
-  }, []);
-
-  const collapseRecursive = useCallback(
-    (dirId: string) => {
-      const pm = parentMapRef.current;
-      const descendants: string[] = [];
-      for (const expandedId of expandedDirsRef.current) {
-        if (expandedId !== dirId && isDescendant(expandedId, dirId, pm)) {
-          descendants.push(expandedId);
-        }
-      }
-      // Collapse deepest first
-      for (const descId of descendants) {
-        collapseOne(descId);
-      }
-      collapseOne(dirId);
-    },
-    [collapseOne],
-  );
-
-  const expandOne = useCallback((dirId: string) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const children = childMapRef.current.get(dirId);
-    if (!children || (children.fileNodes.length === 0 && children.fileEdges.length === 0)) return;
-
-    if (expandedDirsRef.current.has(dirId)) return;
-
-    const newNodes: string[] = [];
-    const newEdges: string[] = [];
-
-    cy.batch(() => {
-      const added = cy.add([...children.fileNodes, ...children.fileEdges]);
-      added.forEach((el) => {
-        if (el.isNode()) newNodes.push(el.id());
-        else newEdges.push(el.id());
-      });
-
-      // Position file nodes in a circle around the parent dir
-      const parentPos = cy.getElementById(dirId).position();
-      const count = children.fileNodes.length;
-      const addedNodes = added.nodes();
-      addedNodes.forEach((n, i) => {
-        const angle = (2 * Math.PI * i) / Math.max(count, 1);
-        const ring = Math.floor(i / 12);
-        const radius = 100 + ring * 40;
-        n.position({
-          x: parentPos.x + radius * Math.cos(angle),
-          y: parentPos.y + radius * Math.sin(angle),
-        });
-      });
-
-      // Sync label state for newly added nodes
-      if (labelsVisibleRef.current) {
-        addedNodes.addClass("labels-on");
-      }
-    });
-
-    addedNodesRef.current.set(dirId, newNodes);
-    addedEdgesRef.current.set(dirId, newEdges);
-    expandedDirsRef.current.add(dirId);
-  }, []);
-
-  const toggleExpand = useCallback(
-    (dirId: string) => {
-      if (expandedDirsRef.current.has(dirId)) {
-        collapseRecursive(dirId);
-      } else {
-        expandOne(dirId);
-      }
-    },
-    [collapseRecursive, expandOne],
-  );
-
-  // Keep stable ref for cytoscape event handlers
-  toggleExpandRef.current = toggleExpand;
-
-  // ── Cytoscape init (re-runs when graph data changes) ──
-  useEffect(() => {
-    if (!layers || !containerRef.current) return;
-
-    // Cleanup previous instance
-    if (cyRef.current) {
-      cyRef.current.destroy();
-      cyRef.current = null;
-    }
-
-    expandedDirsRef.current = new Set();
-    addedNodesRef.current = new Map();
-    addedEdgesRef.current = new Map();
-    parentMapRef.current = layers.parentMap;
-    childMapRef.current = layers.childMap;
-    totalNodeCountRef.current = layers.totalNodeCount;
-
-    const { dirElements } = layers;
-
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements: dirElements,
-      pixelRatio: 1, // Half-res on retina for huge perf win
-      style: [
-        // ── Nodes ──
-        {
-          selector: "node",
-          style: {
-            "background-color": "data(color)",
-            "background-opacity": 0.7,
-            width: "data(nodeSize)",
-            height: "data(nodeSize)",
-            label: "data(label)",
-            "font-size": "7px",
-            "text-valign": "bottom",
-            "text-halign": "center",
-            "text-margin-y": 4,
-            color: "data(color)",
-            "text-opacity": 0,
-            "font-family":
-              "'SF Pro Display', 'Segoe UI', system-ui, sans-serif",
-            "z-index": 10,
-            "transition-property":
-              "background-opacity, text-opacity, width, height",
-            "transition-duration": 200,
-          },
-        },
-        // Selected
-        {
-          selector: "node:selected",
-          style: {
-            "background-opacity": 1,
-            width: "mapData(nodeSize, 8, 14, 12, 20)",
-            height: "mapData(nodeSize, 8, 14, 12, 20)",
-            "z-index": 9999,
-          },
-        },
-        // Dimmed
-        {
-          selector: "node.dimmed",
-          style: { opacity: 0.04 },
-        },
-        {
-          selector: "node.highlighted",
-          style: {
-            opacity: 1,
-            "background-opacity": 0.9,
-          },
-        },
-        // Labels on (zoom past threshold)
-        {
-          selector: "node.labels-on",
-          style: {
-            "text-opacity": 0.7,
-          },
-        },
-        // Truncated dir nodes → dashed border
-        {
-          selector: "node.truncated",
-          style: {
-            "border-style": "dashed",
-            "border-width": 1.5,
-            "border-color": "data(color)",
-            "border-opacity": 0.5,
-          },
-        },
-        // ── Edges ──
-        {
-          selector: "edge",
-          style: {
-            width: 0.3,
-            "line-color": "oklch(100% 0 0 / 0.05)",
-            "curve-style": "bezier",
-            "target-arrow-shape": "none",
-            "z-index": 0,
-            "transition-property": "line-color, width, opacity",
-            "transition-duration": 200,
-          },
-        },
-        {
-          selector: "edge.dimmed",
-          style: { opacity: 0 },
-        },
-        {
-          selector: "edge.highlighted",
-          style: {
-            "line-color": "oklch(100% 0 0 / 0.15)",
-            width: 0.5,
-            opacity: 1,
-          },
-        },
-      ],
-      layout: {
-        name: "cose",
-        animate: false, // Skip animation for initial render
-        nodeRepulsion: () => 8000,
-        idealEdgeLength: () => 120,
-        gravity: 0.15,
-        numIter: 800,
-        randomize: false,
-      },
-      wheelSensitivity: 0.2,
-      minZoom: 0.1,
-      maxZoom: 5,
-    });
-
-    // ── Zoom-based label toggle ──
-    cy.on("zoom", () => {
-      const z = cy.zoom();
-      const next = z > LABEL_ZOOM_THRESHOLD;
-      setLabelsVisible((prev) => {
-        if (next !== prev) {
-          if (next) cy.nodes().addClass("labels-on");
-          else cy.nodes().removeClass("labels-on");
-        }
-        return next;
-      });
-    });
-
-    // ── Tooltip on hover ──
-    cy.on("mouseover", "node", (evt: EventObject) => {
-      const node = evt.target;
-      const pos = node.renderedPosition();
-      const containerPos = containerRef.current?.getBoundingClientRect();
-      if (!containerPos) return;
-
-      const d = node.data();
-      const k = d.kind ?? "file";
-      const sz = formatSize(d.size as number | undefined);
-      const truncated = d.truncated as boolean | undefined;
-      const hasKids = d.hasChildren as boolean | undefined;
-      const expanded = expandedDirsRef.current.has(node.id());
-
-      let kindLabel = k === "dir" ? "Directory" : "File";
-      if (k === "dir" && truncated) {
-        kindLabel += " (truncated)";
-      }
-      if (k === "dir" && hasKids && expanded) {
-        kindLabel += " · expanded";
-      } else if (k === "dir" && hasKids && !expanded) {
-        kindLabel += " · double-click to expand";
-      }
-
-      setTooltip({
-        visible: true,
-        x: pos.x + containerPos.left + 10,
-        y: pos.y + containerPos.top - 50,
-        label: d.label as string,
-        path: d.path as string,
-        kind: kindLabel,
-        size: sz,
-      });
-    });
-
-    cy.on("mouseout", "node", () => {
-      setTooltip((prev) => ({ ...prev, visible: false }));
-    });
-
-    // ── Single-click: 1-degree neighborhood highlight ──
-    cy.on("tap", "node", (evt: EventObject) => {
-      const target = evt.target;
-      const neighbourhood = target
-        .closedNeighborhood()
-        .add(target.connectedEdges());
-
-      cy.elements().addClass("dimmed");
-      neighbourhood.removeClass("dimmed").addClass("highlighted");
-    });
-
-    cy.on("tap", (evt: EventObject) => {
-      if (evt.target === cy) {
-        cy.elements().removeClass("dimmed").removeClass("highlighted");
-      }
-    });
-
-    // ── Double-click: expand/collapse dir nodes ──
-    cy.on("dbltap", "node", (evt: EventObject) => {
-      const node = evt.target;
-      if (node.data("kind") !== "dir") return;
-      toggleExpandRef.current(node.id());
-    });
-
-    // ── Initial fit ──
-    cy.ready(() => {
-      cy.fit(undefined, 50);
-    });
-
-    cyRef.current = cy;
-
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [layers]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Layout toggle (user-initiated, animate: true) ──
-  const handleLayoutChange = useCallback(
-    (name: LayoutName) => {
-      setLayoutName(name);
-      if (!cyRef.current) return;
-      cyRef.current.elements().removeClass("dimmed").removeClass("highlighted");
-      cyRef.current
-        .layout({
-          name,
-          ...(name === "cose"
-            ? {
-                animate: true,
-                animationDuration: 600,
-                animationEasing: "ease-out",
-                nodeRepulsion: () => 8000,
-                idealEdgeLength: () => 120,
-                gravity: 0.15,
-                numIter: 800,
-              }
-            : {
-                directed: false,
-                spacingFactor: 1.2,
-                animate: true,
-                animationDuration: 400,
-                animationEasing: "ease-out",
-              }),
-        })
-        .run();
     },
     [],
   );
 
+  // ── Expand one dir ──
+  const expandDir = useCallback(
+    (dirId: string, g: Graph, s: Sigma) => {
+      const children = childMapRef.current.get(dirId);
+      if (!children || (children.fileNodes.length === 0 && children.fileEdges.length === 0)) return;
+      if (expandedDirsRef.current.has(dirId)) return;
+
+      const px = (g.getNodeAttribute(dirId, "x") as number) || 0;
+      const py = (g.getNodeAttribute(dirId, "y") as number) || 0;
+      const count = children.fileNodes.length;
+
+      for (let i = 0; i < count; i++) {
+        const fn = children.fileNodes[i];
+        const angle = (2 * Math.PI * i) / Math.max(count, 1);
+        const ring = Math.floor(i / 12);
+        const radius = 80 + ring * 35;
+        g.addNode(fn.id, {
+          x: px + radius * Math.cos(angle),
+          y: py + radius * Math.sin(angle),
+          label: fn.label,
+          path: fn.path,
+          kind: fn.kind,
+          extension: fn.extension ?? null,
+          nodeSize: fn.nodeSize,
+          color: fn.color,
+          hasChildren: false,
+          truncated: false,
+          hidden: false,
+          forceLabel: false,
+        });
+      }
+
+      for (const fe of children.fileEdges) {
+        if (g.hasNode(fe.source) && g.hasNode(fe.target)) {
+          g.addEdgeWithKey(fe.id, fe.source, fe.target);
+        }
+      }
+
+      expandedDirsRef.current.add(dirId);
+      s.refresh();
+    },
+    [],
+  );
+
+  // ── Main init effect ──
+  useEffect(() => {
+    if (!layers || !containerRef.current) return;
+
+    // Cleanup
+    if (sigmaRef.current) {
+      sigmaRef.current.kill();
+      sigmaRef.current = null;
+    }
+    killForce();
+
+    expandedDirsRef.current = new Set();
+    childMapRef.current = layers.childMap;
+    highlightRef.current = null;
+
+    // Create graphology graph
+    const g = new Graph({
+      multi: false,
+      type: "directed",
+      allowSelfLoops: false,
+    });
+
+    // Add dir nodes with random initial positions
+    const w = containerRef.current.clientWidth || 800;
+    const h = containerRef.current.clientHeight || 600;
+    const spread = Math.min(w, h) * 0.35;
+
+    for (const n of layers.dirNodes) {
+      g.addNode(n.id, {
+        x: Math.random() * spread * 2 - spread,
+        y: Math.random() * spread * 2 - spread,
+        label: n.label,
+        path: n.path,
+        kind: n.kind,
+        extension: null,
+        nodeSize: n.nodeSize,
+        color: n.color,
+        hasChildren: n.hasChildren,
+        truncated: n.truncated,
+        hidden: false,
+        forceLabel: false,
+      });
+    }
+
+    // Add dir→dir edges
+    for (const e of layers.dirEdges) {
+      if (g.hasNode(e.source) && g.hasNode(e.target)) {
+        g.addEdgeWithKey(e.id, e.source, e.target);
+      }
+    }
+
+    // Create Sigma WebGL renderer (Sigma v3 auto-detects WebGL)
+    const s = new Sigma(g, containerRef.current, {
+      allowInvalidContainer: true,
+      stagePadding: 30,
+      renderLabels: false,
+      renderEdgeLabels: false,
+      enableEdgeEvents: false,
+      labelFont: "Georgia, system-ui, sans-serif",
+      labelSize: 9,
+      labelDensity: 0.3,
+      labelRenderedSizeThreshold: 4,
+      minCameraRatio: 0.05,
+      maxCameraRatio: 8,
+      // Prefer color from node attributes
+      defaultNodeColor: "#555",
+      defaultEdgeColor: "rgba(255,255,255,0.05)",
+      minEdgeThickness: 0.3,
+      autoRescale: true,
+      autoCenter: true,
+      // Node reducer: derive display from attributes
+      nodeReducer: (_node, data) => {
+        const nd = data as NodeAttr;
+        let color = nd.color;
+        let size = nd.nodeSize;
+
+        // Highlight dimming
+        if (highlightRef.current && !highlightRef.current.neighbors.has(_node)) {
+          color = "oklch(6% 0.002 260)";
+          size = size * 0.3;
+        }
+
+        return {
+          label: nd.hidden ? "" : "",
+          size,
+          color,
+          forceLabel: nd.forceLabel || false,
+          type: "circle",
+        };
+      },
+      edgeReducer: (_edge, data) => {
+        const ea = data as Attributes;
+        return {
+          size: 0.3,
+          color: ea.color || "rgba(255,255,255,0.05)",
+          forceLabel: false,
+          type: "line",
+        };
+      },
+    });
+
+    // ── Event bindings ──
+
+    // Zoom/pan → show/hide labels based on zoom ratio
+    const updateLabelVisibility = () => {
+      const ratio = s.getCamera().getState().ratio;
+      if (ratio > LABEL_ZOOM_THRESHOLD) {
+        if (!s.getSetting("renderLabels")) {
+          s.setSetting("renderLabels", true);
+          setLabelsVisible(true);
+        }
+      } else {
+        if (s.getSetting("renderLabels")) {
+          s.setSetting("renderLabels", false);
+          setLabelsVisible(false);
+        }
+      }
+    };
+    s.on("wheelStage", updateLabelVisibility);
+    s.on("moveBody", updateLabelVisibility);
+
+    // Tooltip
+    s.on("enterNode", ({ node }) => {
+      const nd = g.getNodeAttributes(node) as NodeAttr;
+      const pos = s.graphToViewport({ x: nd.x, y: nd.y });
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      let kindLabel = nd.kind === "dir" ? "Directory" : "File";
+      if (nd.truncated) kindLabel += " (truncated)";
+      if (nd.kind === "dir" && nd.hasChildren) {
+        kindLabel += expandedDirsRef.current.has(node) ? " · expanded" : " · click to expand";
+      }
+      setTooltip({
+        visible: true,
+        x: pos.x + rect.left + 12,
+        y: pos.y + rect.top - 48,
+        label: nd.label,
+        path: nd.path,
+        kind: kindLabel,
+        size: formatSize(nd.size as number | undefined),
+      });
+    });
+
+    s.on("leaveNode", () => {
+      setTooltip((prev) => ({ ...prev, visible: false }));
+    });
+
+    // Click node → neighborhood highlight
+    s.on("clickNode", ({ node }) => {
+      const neighbors = new Set<string>();
+      neighbors.add(node);
+      g.forEachNeighbor(node, (n: string) => neighbors.add(n));
+      highlightRef.current = { neighbors };
+      s.refresh();
+    });
+
+    // Click stage → clear highlight
+    s.on("clickStage", () => {
+      if (highlightRef.current) {
+        highlightRef.current = null;
+        s.refresh();
+      }
+    });
+
+    // Double-click → expand/collapse dir
+    s.on("doubleClickNode", ({ node }) => {
+      const nd = g.getNodeAttributes(node) as NodeAttr;
+      if (nd.kind !== "dir" || !nd.hasChildren) return;
+
+      if (expandedDirsRef.current.has(node)) {
+        collapseDir(node, g);
+        s.refresh();
+      } else {
+        expandDir(node, g, s);
+        // Small local force sim to settle new nodes
+        startForce(g, FORCE_LOCAL_ITER, {
+          repulsion: 2000,
+          attraction: 0.01,
+          gravity: 0.02,
+          damping: 0.8,
+        });
+      }
+    });
+
+    // Fit to screen on load
+    setTimeout(() => s.getCamera().animatedReset({ duration: 300 }), 100);
+
+    sigmaRef.current = s;
+    graphRef.current = g;
+
+    // Start force simulation for initial layout
+    startForce(g, FORCE_MAX_ITER);
+
+    return () => {
+      killForce();
+      if (sigmaRef.current) {
+        sigmaRef.current.kill();
+        sigmaRef.current = null;
+      }
+    };
+  }, [layers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Toolbar handlers ──
   const handleFit = useCallback(() => {
-    cyRef.current?.fit(undefined, 50);
+    sigmaRef.current?.getCamera().animatedReset({ duration: 300 });
   }, []);
 
-  // ── Derived counts ──
-  const totalCount = layers?.totalNodeCount ?? 0;
-  const dirCount = graph?.nodes.filter((n) => n.kind === "dir").length ?? 0;
-  const fileCount = graph?.nodes.filter((n) => n.kind === "file").length ?? 0;
-  const edgeCount = graph?.edges.length ?? 0;
+  const handleForceRestart = useCallback(() => {
+    const g = graphRef.current;
+    if (!g || g.order === 0) return;
+    killForce();
+
+    // Randomize positions
+    const w = containerRef.current?.clientWidth ?? 800;
+    const h = containerRef.current?.clientHeight ?? 600;
+    const spread = Math.min(w, h) * 0.3;
+    g.forEachNode((node) => {
+      g.setNodeAttribute(node, "x", Math.random() * spread * 2 - spread);
+      g.setNodeAttribute(node, "y", Math.random() * spread * 2 - spread);
+    });
+    sigmaRef.current?.refresh();
+    startForce(g, FORCE_MAX_ITER);
+  }, [killForce, startForce]);
 
   return (
     <div className="flex flex-col h-full co-graph-bg">
@@ -615,105 +569,62 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           </span>
           <span className="co-graph-badge">{edgeCount} edges</span>
           {labelsVisible && (
-            <span
-              className="co-graph-badge"
-              style={{ color: "var(--co-text-muted)" }}
-            >
+            <span className="co-graph-badge" style={{ color: "var(--co-text-muted)" }}>
               labels
             </span>
           )}
           {isVeryLarge && (
-            <span
-              className="co-graph-badge"
-              style={{ color: "oklch(60% 0.18 20)" }}
-              title="Directory-only mode for performance"
-            >
+            <span className="co-graph-badge" style={{ color: "oklch(60% 0.18 20)" }} title="Large graph — dir-only">
               dir-only
             </span>
           )}
         </div>
 
         <div className="co-graph-toolbar-right">
-          <div className="co-graph-layout-toggle">
-            <button
-              className={`co-graph-layout-btn ${layoutName === "cose" ? "co-graph-layout-btn-active" : ""}`}
-              onClick={() => handleLayoutChange("cose")}
-              title="Force-directed"
-            >
-              <Network size={12} />
-            </button>
-            <button
-              className={`co-graph-layout-btn ${layoutName === "breadthfirst" ? "co-graph-layout-btn-active" : ""}`}
-              onClick={() => handleLayoutChange("breadthfirst")}
-              title="Hierarchy"
-            >
-              <GitBranch size={12} />
-            </button>
-          </div>
-          <button
-            className="co-graph-icon-btn"
-            onClick={handleFit}
-            title="Fit"
-          >
+          <button className="co-graph-icon-btn" onClick={handleForceRestart} title="Restart force layout">
+            <Zap size={13} />
+          </button>
+          <button className="co-graph-icon-btn" onClick={handleFit} title="Fit to screen">
             <Maximize2 size={13} />
           </button>
-          <button
-            className="co-graph-icon-btn"
-            onClick={refresh}
-            disabled={loading}
-            title="Rescan"
-          >
-            <RefreshCw
-              size={13}
-              className={loading ? "animate-spin" : ""}
-            />
+          <button className="co-graph-icon-btn" onClick={refresh} disabled={loading} title="Rescan">
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
       {/* ── Canvas ── */}
       <div className="co-graph-canvas-wrapper">
-        {/* Large graph warning */}
-        {isHugeGraph && (
+        {isHuge && (
           <div className="co-graph-warning">
             <span>
-              ⚠ {totalCount} nodes — very large project.
-              Directory-only view active.
-              Double-click dirs to inspect specific subtrees.
-              Consider narrowing the project scope.
+              ⚠ {totalCount} nodes — very large project. Directory-only view active.
             </span>
           </div>
         )}
 
-        {loading && !graph ? (
+        {loading && !graphData ? (
           <div className="co-graph-loading">
             <div className="co-graph-loading-spinner" />
             <p className="co-graph-loading-text">Scanning files...</p>
           </div>
-        ) : graph && graph.nodes.length === 0 ? (
+        ) : graphData && graphData.nodes.length === 0 ? (
           <div className="co-graph-empty">
             <p className="co-graph-empty-title">Empty</p>
-            <p className="co-graph-empty-desc">
-              This directory contains no files or folders.
-            </p>
+            <p className="co-graph-empty-desc">This directory contains no files or folders.</p>
           </div>
         ) : !projectPath ? (
           <div className="co-graph-empty">
             <p className="co-graph-empty-title">No Project</p>
-            <p className="co-graph-empty-desc">
-              Open a project to visualize its file graph.
-            </p>
+            <p className="co-graph-empty-desc">Open a project to visualize its file graph.</p>
           </div>
         ) : (
-          <div ref={containerRef} className="co-graph-cy-container" />
+          <div ref={containerRef} className="co-graph-sigma-container" />
         )}
 
         {/* Tooltip */}
         {tooltip.visible && (
-          <div
-            className="co-graph-tooltip"
-            style={{ left: tooltip.x, top: tooltip.y }}
-          >
+          <div className="co-graph-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
             <div className="co-graph-tooltip-label">{tooltip.label}</div>
             <div className="co-graph-tooltip-meta">
               <span>{tooltip.kind}</span>
