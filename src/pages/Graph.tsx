@@ -507,6 +507,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
       nodeReducer: (_node, data) => {
         const nd = data as unknown as GraphNodeAttr;
         return {
+          ...nd,
           label: "",
           size: nd.nodeSize || 5,
           color: nd.color || "#666",
