@@ -122,10 +122,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   }, [loading]);
 
   // ── Dynamic bounds for adaptive camera ──
-  const bounds = useMemo(() => computeBounds(data), [data]);
-  // Camera distance: enough to see the whole galaxy comfortably
-  const camDist = bounds ? bounds.radius * 2.0 : 50;
-  const camPos = useMemo(() => ({ x: 0, y: camDist * 0.3, z: camDist }), [camDist]);
+  // (must be after data declaration — see below)
 
   // Reset view — zoom to fit entire galaxy
   const handleReset = useCallback(() => {
@@ -153,6 +150,11 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   useEffect(() => { const onR = () => setDim({ w: window.innerWidth, h: window.innerHeight }); window.addEventListener("resize", onR); return () => window.removeEventListener("resize", onR); }, []);
 
   const data = useMemo(() => graph ? toFGData(graph.nodes, graph.edges, isDark) : { nodes:[], links:[] }, [graph, isDark]);
+
+  // ── Dynamic bounds (must be after data) ──
+  const bounds = useMemo(() => computeBounds(data), [data]);
+  const camDist = bounds ? bounds.radius * 2.0 : 50;
+  const camPos = useMemo(() => ({ x: 0, y: camDist * 0.3, z: camDist }), [camDist]);
 
   // 3D node
   const nodeObj = useCallback((node: any) => {
