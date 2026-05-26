@@ -2,6 +2,7 @@
 // Project selector → AppShell with Dashboard / Timeline / Graph views
 
 import { useState } from "react";
+import { ThemeProvider } from "@/hooks/useTheme";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { DashboardPage } from "@/pages/Dashboard";
@@ -19,26 +20,30 @@ export default function App() {
   // No project open → show project selector
   if (!project) {
     return (
-      <ProjectSelector
-        recentProjects={recentProjects}
-        isInitializing={isInitializing}
-        onOpenProject={openProject}
-        onSelectRecent={(path) => openProject(path)}
-      />
+      <ThemeProvider>
+        <ProjectSelector
+          recentProjects={recentProjects}
+          isInitializing={isInitializing}
+          onOpenProject={openProject}
+          onSelectRecent={(path) => openProject(path)}
+        />
+      </ThemeProvider>
     );
   }
 
   // Project is open → main shell with views
   return (
-    <AppShell
-      activeTab={activeTab}
-      onTabChange={(tab) => setActiveTab(tab as ViewTab)}
-      projectName={project.name}
-      watcherRunning={status?.running}
-    >
-      {activeTab === "dashboard" && <DashboardPage projectPath={project.path} />}
-      {activeTab === "timeline" && <TimelinePage projectPath={project.path} />}
-      {activeTab === "graph" && <GraphPage projectPath={project.path} />}
-    </AppShell>
+    <ThemeProvider>
+      <AppShell
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab as ViewTab)}
+        projectName={project.name}
+        watcherRunning={status?.running}
+      >
+        {activeTab === "dashboard" && <DashboardPage projectPath={project.path} />}
+        {activeTab === "timeline" && <TimelinePage projectPath={project.path} />}
+        {activeTab === "graph" && <GraphPage projectPath={project.path} />}
+      </AppShell>
+    </ThemeProvider>
   );
 }

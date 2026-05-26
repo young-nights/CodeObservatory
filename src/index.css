@@ -32,6 +32,35 @@
   --co-accent-text: var(--cosmic-accent);
   --co-accent-subtle: rgba(136, 128, 255, 0.08);
   --co-accent-hover: #9a94ff;
+}
+
+/* ── Light Theme Overrides ── */
+[data-theme="light"] {
+  --cosmic-bg: #f5f5f7;
+  --cosmic-surface: #ffffff;
+  --cosmic-sidebar: #fafafa;
+  --cosmic-border: rgba(0, 0, 0, 0.08);
+  --cosmic-text: #18181b;
+  --cosmic-text-dim: #52525b;
+  --cosmic-accent: #6d28d9;
+  --cosmic-glow: #7c3aed;
+
+  --co-bg: var(--cosmic-bg);
+  --co-bg-card: var(--cosmic-surface);
+  --co-bg-sidebar: var(--cosmic-sidebar);
+  --co-bg-hover: rgba(0, 0, 0, 0.04);
+  --co-bg-active: rgba(109, 40, 217, 0.06);
+  --co-border: var(--cosmic-border);
+  --co-border-hover: rgba(0, 0, 0, 0.12);
+  --co-border-active: rgba(109, 40, 217, 0.2);
+  --co-text: var(--cosmic-text);
+  --co-text-secondary: #3f3f46;
+  --co-text-muted: var(--cosmic-text-dim);
+  --co-text-dim: #a1a1aa;
+  --co-accent: var(--cosmic-accent);
+  --co-accent-text: var(--cosmic-accent);
+  --co-accent-subtle: rgba(109, 40, 217, 0.06);
+  --co-accent-hover: #5b21b6;
   --co-success: #50c878;
   --co-success-bg: rgba(80, 200, 120, 0.08);
   --co-warning: #ffb432;

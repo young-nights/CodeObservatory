@@ -48,7 +48,8 @@ export function ProjectSelector({
   onSelectRecent,
 }: ProjectSelectorProps) {
   const [activeNav, setActiveNav] = useState<NavItem>("projects");
-  const { theme, setTheme } = useTheme();
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
 
   return (
     <div
@@ -259,7 +260,7 @@ export function ProjectSelector({
                     }}
                   >
                     <button
-                      onClick={() => setTheme("dark")}
+                      onClick={toggle}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -271,9 +272,9 @@ export function ProjectSelector({
                         border: "none",
                         cursor: "pointer",
                         background:
-                          theme === "dark" ? "var(--co-accent)" : "transparent",
+                          isDark ? "var(--co-accent)" : "transparent",
                         color:
-                          theme === "dark"
+                          isDark
                             ? "#ffffff"
                             : "var(--co-text-muted)",
                         transition: "background var(--co-duration-fast) var(--co-ease-out)",
@@ -283,7 +284,7 @@ export function ProjectSelector({
                       Dark
                     </button>
                     <button
-                      onClick={() => setTheme("light")}
+                      onClick={toggle}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -295,11 +296,11 @@ export function ProjectSelector({
                         border: "none",
                         cursor: "pointer",
                         background:
-                          theme === "light"
+                          !isDark
                             ? "var(--co-accent)"
                             : "transparent",
                         color:
-                          theme === "light"
+                          !isDark
                             ? "#ffffff"
                             : "var(--co-text-muted)",
                         transition: "background var(--co-duration-fast) var(--co-ease-out)",

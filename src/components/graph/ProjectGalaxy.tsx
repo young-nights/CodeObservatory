@@ -8,6 +8,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { useScanGraph } from "@/hooks/useObservatory";
+import { useTheme } from "@/hooks/useTheme";
 import { SettingsPanel } from "./SettingsPanel";
 import type { FileNode, FileEdge } from "@/lib/types";
 import { FolderOpen, File, Hash, Clock } from "lucide-react";
@@ -25,6 +26,19 @@ const DIR_CYAN = "#00e5ff";
 const DIR_PURPLE = "#b44cff";
 const ROOT_W = "#ffffff";
 
+// Light-theme node color overrides — more saturated for white backgrounds
+const EXT_COLORS_LIGHT: Record<string, string> = {
+  ts: "#2563eb", tsx: "#3b82f6", js: "#0284c7", jsx: "#0ea5e9",
+  rs: "#c2410c", md: "#7c3aed", json: "#b45309", toml: "#b45309",
+  yaml: "#b45309", yml: "#b45309", css: "#059669", scss: "#10b981",
+  html: "#ea580c", py: "#0891b2", c: "#475569", h: "#475569",
+  cpp: "#475569", go: "#0369a1",
+};
+const DEFAULT_FILE_LIGHT = "#4b5563";
+const DIR_CYAN_LIGHT = "#0891b2";
+const DIR_PURPLE_LIGHT = "#7c3aed";
+const ROOT_W_LIGHT = "#1a1a2e";
+
 // ═══════════════════════════ Data transform ═══════════════════
 interface FGNode {
   id: string; name: string; path: string; type: "root" | "dir" | "file";
@@ -32,7 +46,13 @@ interface FGNode {
 }
 interface FGLink { source: string; target: string; }
 
-function toFGData(nodes: FileNode[], edges: FileEdge[]) {
+function toFGData(nodes: FileNode[], edges: FileEdge[], isDark: boolean) {
+  const ec = isDark ? EXT_COLORS : EXT_COLORS_LIGHT;
+  const df = isDark ? DEFAULT_FILE : DEFAULT_FILE_LIGHT;
+  const dc = isDark ? DIR_CYAN : DIR_CYAN_LIGHT;
+  const dp = isDark ? DIR_PURPLE : DIR_PURPLE_LIGHT;
+  const rw = isDark ? ROOT_W : ROOT_W_LIGHT;
+
   const targeted = new Set(edges.map(e => e.target));
   const root = nodes.find(n => !targeted.has(n.id));
   const depth = new Map<string, number>();
@@ -58,7 +78,7 @@ function toFGData(nodes: FileNode[], edges: FileEdge[]) {
       return {
         id: n.id, name: n.label, path: n.path,
         type: isRoot ? "root" : n.kind === "dir" ? "dir" : "file",
-        color: isRoot ? ROOT_W : n.kind === "dir" ? (d === 1 ? DIR_CYAN : DIR_PURPLE) : (EXT_COLORS[n.extension?.toLowerCase() ?? ""] || DEFAULT_FILE),
+        color: isRoot ? rw : n.kind === "dir" ? (d === 1 ? dc : dp) : (ec[n.extension?.toLowerCase() ?? ""] || df),
         val: isRoot ? 12 : n.kind === "dir" ? (d === 1 ? 6 : 4) : 2,
         extension: n.extension, size: n.size,
       } as FGNode;
@@ -122,12 +142,28 @@ interface Props {
 export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props) {
   const fgRef = useRef<ForceGraphMethods>();
   const { graph, loading, refresh } = useScanGraph(projectPath);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+
+  // Theme-aware colors
+  const bgColor = isDark ? "#05050f" : "#f0f0f5";
+  const overlayBg = isDark ? "rgba(8,4,24,0.95)" : "rgba(255,255,255,0.95)";
+  const overlayBorder = isDark ? "1px solid rgba(100,96,255,0.2)" : "1px solid rgba(0,0,0,0.08)";
+  const overlayText = isDark ? "#e8e0f0" : "#18181b";
+  const overlayDim = isDark ? "#8070a0" : "#52525b";
+  const panelBg = isDark ? "rgba(8,4,24,0.7)" : "rgba(255,255,255,0.85)";
+  const panelBorder = isDark ? "1px solid rgba(100,96,255,0.15)" : "1px solid rgba(0,0,0,0.08)";
+  const panelColor = isDark ? "#8070a0" : "#52525b";
+  const titleGlow = isDark ? "0 0 40px rgba(136,128,255,0.4)" : "none";
+  const linkEdgeColor = isDark ? "rgba(100,80,200," : "rgba(30,20,60,";
+  const particleColor = isDark ? "#8880ff" : "#6d28d9";
+
   const [selected, setSelected] = useState<FGNode | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [settings, setSettings] = useState<GalaxySettings>(DEFAULTS);
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
-  useBloom(fgRef, settings.bloomStrength);
+  useBloom(fgRef, isDark ? settings.bloomStrength : Math.max(0.3, settings.bloomStrength * 0.6));
 
   useEffect(() => {
     const onR = () => setDim({ w: window.innerWidth, h: window.innerHeight });
@@ -135,7 +171,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  const data = useMemo(() => graph ? toFGData(graph.nodes, graph.edges) : { nodes: [], links: [] }, [graph]);
+  const data = useMemo(() => graph ? toFGData(graph.nodes, graph.edges, isDark) : { nodes: [], links: [] }, [graph, isDark]);
 
   // 3D node object
   const nodeObj = useCallback((node: any) => {
@@ -163,12 +199,15 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return g;
   }, [settings.nodeSize]);
 
-  // Blazing starfield background
+  // Blazing starfield background — theme-aware
   const bgStars = useMemo(() => {
     const count = 15000;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
+    const hRange = isDark ? [0.55, 0.35] : [0.6, 0.3];
+    const sRange = isDark ? [0.25, 0.25] : [0.3, 0.3];
+    const lRange = isDark ? [0.5, 0.5] : [0.2, 0.3];
     for (let i = 0; i < count; i++) {
       const r = 20 + Math.random() * 180;
       const th = Math.random() * Math.PI * 2;
@@ -176,19 +215,23 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
       pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
       pos[i * 3 + 2] = r * Math.cos(ph);
-      const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.35, 0.25 + Math.random() * 0.25, 0.5 + Math.random() * 0.5);
+      const c = new THREE.Color().setHSL(
+        hRange[0] + Math.random() * hRange[1],
+        sRange[0] + Math.random() * sRange[1],
+        lRange[0] + Math.random() * lRange[1]
+      );
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
     return geo;
-  }, []);
+  }, [isDark]);
 
   const nodeCount = data.nodes.length;
   const dirCount = data.nodes.filter(n => n.type !== "file").length;
 
   return (
-    <div className="relative w-full h-full overflow-hidden" style={{ background: "#05050f" }}>
+    <div className="relative w-full h-full overflow-hidden" style={{ background: bgColor }}>
       {/* ── ForceGraph3D ── */}
       {!loading && data.nodes.length > 0 ? (
         <ForceGraph3D
@@ -196,16 +239,16 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           graphData={data}
           width={dim.w - (fullscreen ? 0 : 200) - (panelOpen ? 280 : 0)}
           height={dim.h - 48}
-          backgroundColor="#05050f"
+          backgroundColor={bgColor}
           showNavInfo={false}
           nodeThreeObject={nodeObj}
           nodeVal={(n: any) => (n as FGNode).val}
           linkWidth={0.3}
-          linkColor={() => `rgba(100,80,200,${settings.edgeOpacity})`}
+          linkColor={() => `${linkEdgeColor}${settings.edgeOpacity})`}
           linkDirectionalParticles={2}
           linkDirectionalParticleSpeed={0.003}
           linkDirectionalParticleWidth={1.2}
-          linkDirectionalParticleColor={() => "#8880ff"}
+          linkDirectionalParticleColor={() => particleColor}
           d3VelocityDecay={0.3}
           d3AlphaDecay={0.015}
           cooldownTicks={250}
@@ -224,22 +267,22 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
         />
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4" style={{ color: "#8070a0", fontSize: 13 }}>
-          {loading ? <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "rgba(100,96,255,0.15)", borderTopColor: "#8880ff" }} /> : "No project data"}
+          {loading ? <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: panelBorder, borderTopColor: isDark ? "#8880ff" : "#6d28d9" }} /> : "No project data"}
         </div>
       )}
 
       {/* ── Overlays ── */}
       <div className="absolute top-6 left-8 pointer-events-none select-none">
-        <h1 className="text-2xl font-extrabold tracking-[0.12em]" style={{ color: "#e8e0f0", textShadow: "0 0 40px rgba(136,128,255,0.4)" }}>PROJECT GALAXY</h1>
-        <p style={{ color: "#8070a0", fontSize: 12, marginTop: 4 }}>{nodeCount > 0 ? `${dirCount} planets · ${nodeCount - dirCount} stars · ${data.links.length} orbits` : "Awaiting…"}</p>
+        <h1 className="text-2xl font-extrabold tracking-[0.12em]" style={{ color: overlayText, textShadow: titleGlow }}>PROJECT GALAXY</h1>
+        <p style={{ color: overlayDim, fontSize: 12, marginTop: 4 }}>{nodeCount > 0 ? `${dirCount} planets · ${nodeCount - dirCount} stars · ${data.links.length} orbits` : "Awaiting…"}</p>
       </div>
 
       {/* Sortcut button */}
-      <button onClick={() => setPanelOpen(v => !v)} className="absolute top-6 right-6 z-30 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(8,4,24,0.7)", border: "1px solid rgba(100,96,255,0.15)", color: "#8070a0" }}>
+      <button onClick={() => setPanelOpen(v => !v)} className="absolute top-6 right-6 z-30 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: panelBg, border: panelBorder, color: panelColor }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
 
-      <button onClick={refresh} className="absolute bottom-6 right-6 z-20 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(8,4,24,0.6)", border: "1px solid rgba(100,96,255,0.15)", color: "#8070a0" }}>
+      <button onClick={refresh} className="absolute bottom-6 right-6 z-20 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: panelBg, border: panelBorder, color: panelColor }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
       </button>
 
@@ -248,15 +291,15 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
       {/* ── Selected node info ── */}
       {selected && (
-        <div className="absolute top-20 right-14 w-72 z-20 rounded-xl p-5" style={{ background: "rgba(8,4,24,0.95)", border: "1px solid rgba(100,96,255,0.2)", backdropFilter: "blur(20px)" }}>
+        <div className="absolute top-20 right-14 w-72 z-20 rounded-xl p-5" style={{ background: overlayBg, border: overlayBorder, backdropFilter: "blur(20px)" }}>
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2.5">
-              {selected.type !== "file" ? <FolderOpen size={18} color="#00e5ff" /> : <File size={18} color="#8880ff" />}
-              <span className="text-sm font-semibold" style={{ color: "#e8e0f0" }}>{selected.name}</span>
+              {selected.type !== "file" ? <FolderOpen size={18} color={isDark ? "#00e5ff" : "#0891b2"} /> : <File size={18} color={isDark ? "#8880ff" : "#6d28d9"} />}
+              <span className="text-sm font-semibold" style={{ color: overlayText }}>{selected.name}</span>
             </div>
-            <button onClick={() => setSelected(null)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8070a0" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+            <button onClick={() => setSelected(null)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={overlayDim} strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
-          <div className="space-y-1.5 text-xs" style={{ color: "#8070a0" }}>
+          <div className="space-y-1.5 text-xs" style={{ color: overlayDim }}>
             <p className="break-all">{selected.path}</p>
             <div className="flex gap-4 mt-2">
               <span className="flex items-center gap-1"><Hash size={10} /> {selected.type}</span>

@@ -3,6 +3,7 @@
 
 import { type ReactNode, createContext, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "@/hooks/useTheme";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
@@ -29,6 +30,11 @@ export function AppShell({
     try { return localStorage.getItem(STORAGE_KEY) === "1"; } catch { return false; }
   });
 
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
+  const shellBg = isDark ? "#08080c" : "#f5f5f7";
+  const mainBg = isDark ? "#000011" : "#f0f0f5";
+
   const handleToggle = useCallback(() => {
     setCollapsed((v) => {
       const next = !v;
@@ -39,7 +45,7 @@ export function AppShell({
 
   return (
     <SidebarContext.Provider value={{ collapsed }}>
-      <div className="flex h-screen overflow-hidden" style={{ background: "#08080c" }}>
+      <div className="flex h-screen overflow-hidden" style={{ background: shellBg }}>
         <Sidebar
           activeTab={activeTab}
           onTabChange={onTabChange}
@@ -53,7 +59,7 @@ export function AppShell({
             collapsed={collapsed}
             onExpand={() => setCollapsed(false)}
           />
-          <main className="flex-1 overflow-hidden" style={{ background: "#000011" }}>
+          <main className="flex-1 overflow-hidden" style={{ background: mainBg }}>
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}

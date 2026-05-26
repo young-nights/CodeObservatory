@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTheme } from "@/hooks/useTheme";
 import {
   Settings,
   ChevronDown,
@@ -51,6 +52,7 @@ function SliderControl({
   step,
   onChange,
   unit = "",
+  isDark = true,
 }: {
   label: string;
   value: number;
@@ -59,17 +61,22 @@ function SliderControl({
   step: number;
   onChange: (v: number) => void;
   unit?: string;
+  isDark?: boolean;
 }) {
   const pct = ((value - min) / (max - min)) * 100;
+  const labelColor = isDark ? "#a1a1aa" : "#3f3f46";
+  const valueColor = isDark ? "#e4e4e7" : "#18181b";
+  const accent = isDark ? "#3b82f6" : "#2563eb";
+  const trackColor = isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)";
   return (
     <label className="block mb-3.5">
       <div className="flex justify-between items-center mb-1.5">
-        <span className="text-xs font-medium" style={{ color: "#a1a1aa" }}>
+        <span className="text-xs font-medium" style={{ color: labelColor }}>
           {label}
         </span>
         <span
           className="text-xs tabular-nums"
-          style={{ color: "#e4e4e7", fontFamily: "ui-monospace, monospace" }}
+          style={{ color: valueColor, fontFamily: "ui-monospace, monospace" }}
         >
           {value}
           {unit}
@@ -84,8 +91,8 @@ function SliderControl({
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full h-1 rounded-full appearance-none cursor-pointer"
         style={{
-          background: `linear-gradient(to right, #3b82f6 ${pct}%, rgba(255,255,255,0.08) ${pct}%)`,
-          accentColor: "#3b82f6",
+          background: `linear-gradient(to right, ${accent} ${pct}%, ${trackColor} ${pct}%)`,
+          accentColor: accent,
         }}
       />
     </label>
@@ -97,25 +104,30 @@ function AccordionGroup({
   icon: Icon,
   defaultOpen = false,
   children,
+  isDark = true,
 }: {
   title: string;
   icon: typeof Settings;
   defaultOpen?: boolean;
   children: React.ReactNode;
+  isDark?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultOpen);
+  const activeColor = isDark ? "#e4e4e7" : "#18181b";
+  const mutedColor = isDark ? "#71717a" : "#52525b";
+  const hoverColor = isDark ? "#a1a1aa" : "#3f3f46";
 
   return (
     <div style={{ marginBottom: 4 }}>
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full flex items-center gap-2 py-2.5 px-1 rounded-md text-left transition-colors"
-        style={{ color: expanded ? "#e4e4e7" : "#71717a" }}
+        style={{ color: expanded ? activeColor : mutedColor }}
         onMouseEnter={(e) => {
-          if (!expanded) e.currentTarget.style.color = "#a1a1aa";
+          if (!expanded) e.currentTarget.style.color = hoverColor;
         }}
         onMouseLeave={(e) => {
-          if (!expanded) e.currentTarget.style.color = "#71717a";
+          if (!expanded) e.currentTarget.style.color = mutedColor;
         }}
       >
         {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
@@ -145,6 +157,23 @@ function AccordionGroup({
 // ══════════════════════════════════════════════════
 
 export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
+  const { theme: currentTheme } = useTheme();
+  const isDark = currentTheme === "dark";
+
+  // Theme-aware colors
+  const panelBg = isDark ? "rgba(9, 9, 11, 0.95)" : "rgba(255, 255, 255, 0.95)";
+  const panelBorder = isDark ? "1px solid rgba(63, 63, 70, 0.5)" : "1px solid rgba(0, 0, 0, 0.08)";
+  const headerBg = isDark ? "1px solid rgba(63, 63, 70, 0.3)" : "1px solid rgba(0, 0, 0, 0.06)";
+  const dividerBorder = isDark ? "1px solid rgba(63, 63, 70, 0.2)" : "1px solid rgba(0, 0, 0, 0.06)";
+  const textPrimary = isDark ? "#e4e4e7" : "#18181b";
+  const textMuted = isDark ? "#71717a" : "#52525b";
+  const textSecondary = isDark ? "#a1a1aa" : "#3f3f46";
+  const accentColor = isDark ? "#3b82f6" : "#2563eb";
+  const accentBg = isDark ? "rgba(59, 130, 246, 0.15)" : "rgba(37, 99, 235, 0.1)";
+  const btnBorder = isDark ? "1px solid rgba(63, 63, 70, 0.4)" : "1px solid rgba(0, 0, 0, 0.1)";
+  const btnBg = isDark ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)";
+  const footerText = isDark ? "#52525b" : "#a1a1aa";
+
   const [panelExpanded, setPanelExpanded] = useState(true);
   const set = (key: keyof GalaxySettings, val: number) =>
     onChange({ ...settings, [key]: val });
@@ -161,8 +190,8 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
           style={{
             width: 280,
             maxHeight: "calc(100vh - 100px)",
-            background: "rgba(9, 9, 11, 0.95)",
-            border: "1px solid rgba(63, 63, 70, 0.5)",
+            background: panelBg,
+            border: panelBorder,
             backdropFilter: "blur(24px)",
           }}
         >
@@ -172,25 +201,25 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
             className="flex items-center justify-between px-4 h-11 shrink-0 transition-colors"
             style={{
               borderBottom: panelExpanded
-                ? "1px solid rgba(63, 63, 70, 0.3)"
+                ? headerBg
                 : "none",
-              color: "#e4e4e7",
+              color: textPrimary,
             }}
           >
             <div className="flex items-center gap-2">
               <div
                 className="flex items-center justify-center w-6 h-6 rounded-md"
-                style={{ background: "rgba(59, 130, 246, 0.15)" }}
+                style={{ background: accentBg }}
               >
-                <Settings size={13} color="#3b82f6" />
+                <Settings size={13} color={accentColor} />
               </div>
               <span className="text-sm font-semibold tracking-tight">Settings</span>
             </div>
             <div className="flex items-center gap-1">
               {panelExpanded ? (
-                <ChevronDown size={15} style={{ color: "#71717a" }} />
+                <ChevronDown size={15} style={{ color: textMuted }} />
               ) : (
-                <ChevronRight size={15} style={{ color: "#71717a" }} />
+                <ChevronRight size={15} style={{ color: textMuted }} />
               )}
             </div>
           </button>
@@ -207,7 +236,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
               >
                 <div className="px-3 py-3">
                   {/* ── Appearance ── */}
-                  <AccordionGroup title="Appearance" icon={Sparkles} defaultOpen={true}>
+                  <AccordionGroup title="Appearance" icon={Sparkles} defaultOpen={true} isDark={isDark}>
                     <SliderControl
                       label="Node Size"
                       value={settings.nodeSize}
@@ -216,6 +245,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       step={0.1}
                       onChange={(v) => set("nodeSize", v)}
                       unit="×"
+                      isDark={isDark}
                     />
                     <SliderControl
                       label="Edge Opacity"
@@ -224,6 +254,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       max={0.5}
                       step={0.01}
                       onChange={(v) => set("edgeOpacity", v)}
+                      isDark={isDark}
                     />
                     <SliderControl
                       label="Bloom Intensity"
@@ -232,11 +263,12 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       max={3}
                       step={0.1}
                       onChange={(v) => set("bloomStrength", v)}
+                      isDark={isDark}
                     />
                   </AccordionGroup>
 
                   {/* ── Force ── */}
-                  <AccordionGroup title="Force" icon={SlidersHorizontal}>
+                  <AccordionGroup title="Force" icon={SlidersHorizontal} isDark={isDark}>
                     <SliderControl
                       label="Charge"
                       value={settings.chargeStrength}
@@ -244,6 +276,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       max={-20}
                       step={10}
                       onChange={(v) => set("chargeStrength", v)}
+                      isDark={isDark}
                     />
                     <SliderControl
                       label="Link Distance"
@@ -253,6 +286,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       step={1}
                       onChange={(v) => set("linkDistance", v)}
                       unit="px"
+                      isDark={isDark}
                     />
                     <SliderControl
                       label="Link Strength"
@@ -261,6 +295,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       max={1}
                       step={0.05}
                       onChange={(v) => set("linkStrength", v)}
+                      isDark={isDark}
                     />
                     <SliderControl
                       label="Center Gravity"
@@ -269,12 +304,13 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       max={0.5}
                       step={0.01}
                       onChange={(v) => set("centerGravity", v)}
+                      isDark={isDark}
                     />
                   </AccordionGroup>
 
                   {/* ── Other ── */}
-                  <AccordionGroup title="Other" icon={Ellipsis}>
-                    <div className="text-xs leading-relaxed" style={{ color: "#71717a" }}>
+                  <AccordionGroup title="Other" icon={Ellipsis} isDark={isDark}>
+                    <div className="text-xs leading-relaxed" style={{ color: textMuted }}>
                       <p className="mb-2">Drag nodes to reposition them in the galaxy.</p>
                       <p className="mb-2">Scroll to zoom in/out of the cosmic view.</p>
                       <p>Click any star to inspect its details.</p>
@@ -284,25 +320,25 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                   {/* ── Reset ── */}
                   <div
                     className="mt-2 pt-3"
-                    style={{ borderTop: "1px solid rgba(63, 63, 70, 0.2)" }}
+                    style={{ borderTop: dividerBorder }}
                   >
                     <button
                       onClick={() => onChange({ ...DEFAULTS })}
                       className="w-full flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all"
                       style={{
-                        color: "#71717a",
-                        border: "1px solid rgba(63, 63, 70, 0.4)",
-                        background: "rgba(255, 255, 255, 0.02)",
+                        color: textMuted,
+                        border: btnBorder,
+                        background: btnBg,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "#a1a1aa";
-                        e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)";
-                        e.currentTarget.style.background = "rgba(59, 130, 246, 0.06)";
+                        e.currentTarget.style.color = textSecondary;
+                        e.currentTarget.style.borderColor = isDark ? "rgba(59, 130, 246, 0.3)" : "rgba(37, 99, 235, 0.3)";
+                        e.currentTarget.style.background = isDark ? "rgba(59, 130, 246, 0.06)" : "rgba(37, 99, 235, 0.06)";
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "#71717a";
-                        e.currentTarget.style.borderColor = "rgba(63, 63, 70, 0.4)";
-                        e.currentTarget.style.background = "rgba(255, 255, 255, 0.02)";
+                        e.currentTarget.style.color = textMuted;
+                        e.currentTarget.style.borderColor = "";
+                        e.currentTarget.style.background = btnBg;
                       }}
                     >
                       <RotateCcw size={11} />
@@ -318,9 +354,9 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
           <div
             className="flex items-center justify-between px-4 py-2 shrink-0"
             style={{
-              borderTop: "1px solid rgba(63, 63, 70, 0.2)",
+              borderTop: dividerBorder,
               fontSize: 10,
-              color: "#52525b",
+              color: footerText,
             }}
           >
             <span className="flex items-center gap-1">
@@ -330,7 +366,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
             <button
               onClick={onClose}
               className="hover:underline"
-              style={{ color: "#3b82f6" }}
+              style={{ color: accentColor }}
             >
               Close
             </button>
