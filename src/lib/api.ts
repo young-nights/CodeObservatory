@@ -76,3 +76,11 @@ export async function buildGraph(projectPath: string): Promise<GraphData> {
 export async function scanDirectory(projectPath: string, maxDepth = 4): Promise<GraphData> {
   return invoke<GraphData>("scan_directory", { projectPath, maxDepth });
 }
+
+/** Get change history for a specific file */
+export async function getFileChanges(
+  projectPath: string,
+  filePath: string,
+): Promise<ChangeRecord[]> {
+  return invoke<ChangeRecord[]>("get_file_changes", { projectPath, filePath });
+}

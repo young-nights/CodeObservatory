@@ -26,6 +26,7 @@ pub fn run() {
             // Change record commands
             commands::changes::get_changes,
             commands::changes::get_change_by_id,
+            commands::changes::get_file_changes,
             // Graph commands
             commands::graph::build_graph,
             commands::graph::scan_directory,

@@ -1016,6 +1016,26 @@ html, body, #root {
   backdrop-filter: blur(4px);
 }
 
+/* ── Galaxy Graph: badge color variants ── */
+.co-graph-badge-star {
+  border-color: oklch(75% 0.18 85 / 0.3);
+  color: oklch(75% 0.18 85);
+}
+.co-graph-badge-planet {
+  border-color: oklch(63% 0.12 250 / 0.3);
+  color: oklch(63% 0.12 250);
+}
+.co-graph-badge-moon {
+  border-color: oklch(58% 0.08 250 / 0.3);
+  color: oklch(58% 0.08 250);
+}
+
+/* ── Star pulse animation (subtle glow on the root node) ── */
+@keyframes co-star-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
 /* ============================================================
    Light Theme Graph Overrides
    ============================================================ */

@@ -43,6 +43,8 @@ export interface FileNode {
   hasChildren?: boolean;
   /** Whether directory scan was truncated at max_depth */
   truncated?: boolean;
+  /** Solar system node type for the galaxy graph visualization */
+  nodeType?: 'star' | 'planet' | 'moon' | 'satellite' | 'dust';
 }
 
 export interface FileEdge {

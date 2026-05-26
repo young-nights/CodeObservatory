@@ -1,24 +1,37 @@
-// Graph — Precision Instrument core visualization
-// Sigma.js WebGL renderer + graphology data graph
-// OKLCH node colors · 0.3px edges · progressive expand/collapse
-// N-body force simulation for layout
+// Graph — 星河图谱 · Precision Instrument core visualization
+// Sigma.js WebGL renderer + solarLayout radial concentric rings
+// Star (Root) → Planet (top dir) → Moon (subdir) → Satellite (file) → Dust (change)
+// OKLCH color space · exponential easing · expand/collapse progressive reveal
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
-import type { Attributes } from "graphology-types";
 import { useScanGraph } from "@/hooks/useObservatory";
-import type { GraphData, FileNode } from "@/lib/types";
-import { RefreshCw, Maximize2, Zap } from "lucide-react";
-import { createForceSimulation } from "@/lib/forceSimulation";
+import type { FileNode, ChangeRecord } from "@/lib/types";
+import * as api from "@/lib/api";
+import {
+  computeSolarLayout,
+  computeDustPositions,
+  getEdgeRing,
+  RING_NAMES,
+} from "@/lib/solarLayout";
+import { RefreshCw, Maximize2, Home, ChevronDown, ChevronUp } from "lucide-react";
 
-// ── Node colors in OKLCH ──
-const NODE_COLORS: Record<string, string> = {
-  dir: "oklch(70% 0.15 85)",
-  ts: "oklch(60% 0.16 250)",
-  tsx: "oklch(60% 0.16 250)",
-  js: "oklch(60% 0.16 250)",
-  jsx: "oklch(60% 0.16 250)",
+// ── OKLCH Node Colors ──
+const NODE_COLORS = {
+  star: "oklch(75% 0.18 85)",
+  planet: "oklch(63% 0.12 250)",
+  moon: "oklch(58% 0.08 250)",
+  dust: "oklch(70% 0.05 85 / 0.6)",
+  default: "oklch(55% 0.02 260)",
+} as const;
+
+// Extension → OKLCH color for file/satellite nodes
+const EXT_COLORS: Record<string, string> = {
+  ts: "oklch(62% 0.16 250)",
+  tsx: "oklch(64% 0.16 250)",
+  js: "oklch(60% 0.14 195)",
+  jsx: "oklch(62% 0.14 195)",
   rs: "oklch(58% 0.17 20)",
   md: "oklch(58% 0.11 300)",
   json: "oklch(65% 0.12 95)",
@@ -26,25 +39,44 @@ const NODE_COLORS: Record<string, string> = {
   yaml: "oklch(65% 0.12 95)",
   yml: "oklch(65% 0.12 95)",
   css: "oklch(58% 0.12 155)",
-  html: "oklch(58% 0.12 155)",
   scss: "oklch(58% 0.12 155)",
-  c: "oklch(55% 0.02 260)",
-  h: "oklch(55% 0.02 260)",
-  cpp: "oklch(55% 0.02 260)",
-  hpp: "oklch(55% 0.02 260)",
+  html: "oklch(58% 0.12 30)",
   py: "oklch(58% 0.1 195)",
-  default: "oklch(55% 0.02 260)",
+  c: "oklch(55% 0.14 200)",
+  h: "oklch(55% 0.14 200)",
+  cpp: "oklch(55% 0.14 200)",
+  hpp: "oklch(55% 0.14 200)",
+  go: "oklch(55% 0.13 180)",
 };
 
-function getNodeColor(node: FileNode): string {
-  if (node.kind === "dir") return NODE_COLORS.dir;
-  const ext =
-    node.extension ?? node.path.split(".").pop()?.toLowerCase() ?? "";
-  return NODE_COLORS[ext] || NODE_COLORS.default;
+// ── Node Sizes ──
+const NODE_SIZES = {
+  star: 18,
+  planet: 10,
+  moon: 7,
+  satellite: 5,
+  dust: 3,
+} as const;
+
+// ── Edge orbit colors & thickness ──
+const ORBIT_COLOR = "oklch(100% 0 0 / 0.04)";
+const EDGE_THICKNESS: Record<number, number> = {
+  1: 0.5,   // Star → Planet
+  2: 0.3,   // Planet → Moon / File
+  3: 0.2,   // File → Dust
+};
+
+const LABEL_ZOOM_THRESHOLD = 2.0;
+
+// ── Helpers ──
+
+function getFileColor(ext?: string): string {
+  if (!ext) return NODE_COLORS.default;
+  return EXT_COLORS[ext.toLowerCase()] ?? NODE_COLORS.default;
 }
 
-function getNodeSize(kind: string, hasChildren: boolean): number {
-  return kind === "dir" ? (hasChildren ? 5 : 4) : 3;
+function getNodeTypeByRing(ring: number): FileNode["nodeType"] {
+  return (RING_NAMES[ring] as FileNode["nodeType"]) ?? "satellite";
 }
 
 function formatSize(bytes?: number): string {
@@ -54,134 +86,49 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ── Thresholds ──
-const LABEL_ZOOM_THRESHOLD = 2.0;
-const FORCE_MAX_ITER = 300;
-const FORCE_LOCAL_ITER = 60;
+function formatChangeKind(kind: string): string {
+  switch (kind) {
+    case "created": return "✚";
+    case "modified": return "✎";
+    case "deleted": return "✕";
+    default: return kind;
+  }
+}
 
-// ── Graph Layers Pre-processing ──
-interface NodeDef {
-  id: string;
+function shortTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return iso.slice(0, 5);
+  }
+}
+
+// ── GraphNode extended attributes ──
+interface GraphNodeAttr {
+  x: number;
+  y: number;
   label: string;
   path: string;
-  kind: "dir" | "file";
+  kind: "dir" | "file" | null;
+  ring: number;
+  nodeType: FileNode["nodeType"];
+  color: string;
+  nodeSize: number;
+  hasChildren: boolean;
+  hidden: boolean;
+  // for file nodes: cached extension, size
   extension?: string;
   size?: number;
-  modified?: string;
-  color: string;
-  nodeSize: number;
-  hasChildren: boolean;
-  truncated: boolean;
-}
-
-interface EdgeDef {
-  id: string;
-  source: string;
-  target: string;
-}
-
-interface GraphLayers {
-  dirNodes: NodeDef[];
-  dirEdges: EdgeDef[];
-  childMap: Map<string, { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }>;
-  parentMap: Map<string, string>;
-  totalNodeCount: number;
-  truncatedDirs: Set<string>;
-}
-
-function buildGraphLayers(data: GraphData): GraphLayers {
-  const nodeMap = new Map<string, FileNode>();
-  const hasChildrenSet = new Set<string>();
-  const parentMap = new Map<string, string>();
-  const truncatedDirs = new Set<string>();
-  const dirNodes: NodeDef[] = [];
-  const dirEdges: EdgeDef[] = [];
-  const childMap = new Map<
-    string,
-    { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }
-  >();
-
-  for (const n of data.nodes) {
-    nodeMap.set(n.id, n);
-    if (n.truncated) truncatedDirs.add(n.id);
-  }
-
-  for (const e of data.edges) {
-    hasChildrenSet.add(e.source);
-    parentMap.set(e.target, e.source);
-  }
-
-  // Dir nodes → initial elements
-  for (const n of data.nodes) {
-    if (n.kind !== "dir") continue;
-    const hasKids = hasChildrenSet.has(n.id);
-    dirNodes.push({
-      id: n.id,
-      label: n.label,
-      path: n.path,
-      kind: "dir",
-      color: NODE_COLORS.dir,
-      nodeSize: getNodeSize("dir", hasKids),
-      hasChildren: hasKids,
-      truncated: truncatedDirs.has(n.id),
-    });
-    childMap.set(n.id, { fileNodes: [], fileEdges: [] });
-  }
-
-  // Classify edges
-  for (const e of data.edges) {
-    const targetNode = nodeMap.get(e.target);
-    if (!targetNode) continue;
-    if (targetNode.kind === "dir") {
-      dirEdges.push({ id: e.id, source: e.source, target: e.target });
-    } else {
-      const bucket = childMap.get(e.source);
-      if (bucket) {
-        bucket.fileEdges.push({ id: e.id, source: e.source, target: e.target });
-      }
-    }
-  }
-
-  // File nodes → childMap
-  for (const n of data.nodes) {
-    if (n.kind !== "file") continue;
-    const parentId = parentMap.get(n.id);
-    if (!parentId) continue;
-    const bucket = childMap.get(parentId);
-    if (!bucket) continue;
-    bucket.fileNodes.push({
-      id: n.id,
-      label: n.label,
-      path: n.path,
-      kind: "file",
-      extension: n.extension,
-      size: n.size,
-      modified: n.modified,
-      color: getNodeColor(n),
-      nodeSize: getNodeSize("file", false),
-      hasChildren: false,
-      truncated: false,
-    });
-  }
-
-  return { dirNodes, dirEdges, childMap, parentMap, totalNodeCount: data.nodes.length, truncatedDirs };
-}
-
-// ── Graphology node attributes ──
-interface NodeAttr extends Attributes {
-  label: string;
-  path: string;
-  kind: "dir" | "file";
-  extension: string | null;
-  nodeSize: number;
-  color: string;
-  hasChildren: boolean;
-  truncated: boolean;
-  hidden: boolean;
-  forceLabel: boolean;
+  // for dust nodes
+  changeKind?: string;
+  changeTimestamp?: string;
+  changeSummary?: string;
 }
 
 // ── Component ──
+
 interface GraphPageProps {
   projectPath: string;
 }
@@ -191,11 +138,11 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const graphRef = useRef<Graph | null>(null);
-  const forceRef = useRef<ReturnType<typeof createForceSimulation> | null>(null);
-  const forceRafRef = useRef<number>(0);
+
+  // Persistent refs for expand/collapse state
   const expandedDirsRef = useRef<Set<string>>(new Set());
-  const childMapRef = useRef<Map<string, { fileNodes: NodeDef[]; fileEdges: EdgeDef[] }>>(new Map());
-  const highlightRef = useRef<{ neighbors: Set<string> } | null>(null);
+  const expandedFilesRef = useRef<Set<string>>(new Set());
+  const dustCacheRef = useRef<Map<string, ChangeRecord[]>>(new Map());
 
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
@@ -208,237 +155,363 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   }>({ visible: false, x: 0, y: 0, label: "", path: "", kind: "", size: "" });
   const [labelsVisible, setLabelsVisible] = useState(false);
 
-  // Pre-process layers
-  const layers = useMemo(
-    () => (graphData ? buildGraphLayers(graphData) : null),
+  // ── Compute solar layout ──
+  const layout = useMemo(
+    () => (graphData ? computeSolarLayout(graphData.nodes, graphData.edges, projectPath) : null),
+    [graphData, projectPath],
+  );
+
+  // Derived counts
+  const nodeMap = useMemo(
+    () => new Map((graphData?.nodes ?? []).map((n) => [n.id, n])),
     [graphData],
   );
+  const starCount = layout ? 1 : 0;
+  const planetCount = layout
+    ? [...layout.ringMap.values()].filter((r) => r === 1).length
+    : 0;
+  const moonCount = layout
+    ? [...layout.ringMap.values()].filter((r) => r === 2).length
+    : 0;
+  const fileCount = layout
+    ? [...layout.ringMap.values()].filter((r) => r === 3).length
+    : 0;
 
-  const totalCount = layers?.totalNodeCount ?? 0;
-  const dirCount = graphData?.nodes.filter((n) => n.kind === "dir").length ?? 0;
-  const fileCount = graphData?.nodes.filter((n) => n.kind === "file").length ?? 0;
-  const edgeCount = graphData?.edges.length ?? 0;
-  const isVeryLarge = totalCount > 800;
-  const isHuge = totalCount > 1500;
-
-  // ── Kill running force sim ──
-  const killForce = useCallback(() => {
-    if (forceRafRef.current) {
-      cancelAnimationFrame(forceRafRef.current);
-      forceRafRef.current = 0;
-    }
-    if (forceRef.current) {
-      forceRef.current.stop();
-      forceRef.current = null;
-    }
-  }, []);
-
-  // ── Start force sim + sigma refresh loop ──
-  const startForce = useCallback(
-    (g: Graph, maxIter: number, opts?: { repulsion?: number; attraction?: number; gravity?: number; damping?: number }) => {
-      killForce();
-      const ctrl = createForceSimulation(g, {
-        repulsion: opts?.repulsion ?? 5000,
-        attraction: opts?.attraction ?? 0.005,
-        gravity: opts?.gravity ?? 0.01,
-        damping: opts?.damping ?? 0.85,
-        maxIterations: maxIter,
-        onEnd: () => {
-          sigmaRef.current?.refresh();
-        },
-      });
-      forceRef.current = ctrl;
-      ctrl.start();
-
-      // Refresh sigma each animation frame while force runs
-      const loop = () => {
-        if (!ctrl.isRunning()) {
-          forceRafRef.current = 0;
-          return;
-        }
-        sigmaRef.current?.refresh();
-        forceRafRef.current = requestAnimationFrame(loop);
-      };
-      forceRafRef.current = requestAnimationFrame(loop);
-    },
-    [killForce],
-  );
-
-  // ── Collapse one dir ──
-  const collapseDir = useCallback(
-    (dirId: string, g: Graph) => {
-      const children = childMapRef.current.get(dirId);
-      if (!children) return;
-
-      for (const fn of children.fileNodes) {
-        if (g.hasNode(fn.id)) g.dropNode(fn.id);
-      }
-      for (const fe of children.fileEdges) {
-        if (g.hasEdge(fe.id)) g.dropEdge(fe.id);
-      }
-      expandedDirsRef.current.delete(dirId);
-    },
-    [],
-  );
-
-  // ── Expand one dir ──
+  // ── Expand one directory: add its direct file children to the graph ──
   const expandDir = useCallback(
-    (dirId: string, g: Graph, s: Sigma) => {
-      const children = childMapRef.current.get(dirId);
-      if (!children || (children.fileNodes.length === 0 && children.fileEdges.length === 0)) return;
-      if (expandedDirsRef.current.has(dirId)) return;
+    (dirId: string) => {
+      const g = graphRef.current;
+      const s = sigmaRef.current;
+      if (!g || !s || !layout) return;
 
-      const px = (g.getNodeAttribute(dirId, "x") as number) || 0;
-      const py = (g.getNodeAttribute(dirId, "y") as number) || 0;
-      const count = children.fileNodes.length;
+      const children = layout.childMap.get(dirId);
+      if (!children || children.length === 0) return;
 
-      for (let i = 0; i < count; i++) {
-        const fn = children.fileNodes[i];
-        const angle = (2 * Math.PI * i) / Math.max(count, 1);
-        const ring = Math.floor(i / 12);
-        const radius = 80 + ring * 35;
-        g.addNode(fn.id, {
-          x: px + radius * Math.cos(angle),
-          y: py + radius * Math.sin(angle),
-          label: fn.label,
-          path: fn.path,
-          kind: fn.kind,
-          extension: fn.extension ?? null,
-          nodeSize: fn.nodeSize,
-          color: fn.color,
+      for (const childId of children) {
+        const nd = nodeMap.get(childId);
+        const childRing = layout.ringMap.get(childId);
+        if (!nd || childRing == null) continue;
+        if (childRing !== 3) continue; // only add satellite (file) nodes
+
+        const pos = layout.positions.get(childId);
+        if (!pos) continue;
+
+        // If already in graph, skip
+        if (g.hasNode(childId)) {
+          // make sure it's not hidden
+          try { g.setNodeAttribute(childId, "hidden", false); } catch { /* hot */ }
+          continue;
+        }
+
+        const color = nd.kind === "file" ? getFileColor(nd.extension) : NODE_COLORS.planet;
+        g.addNode(childId, {
+          x: pos.x,
+          y: pos.y,
+          label: nd.label,
+          path: nd.path,
+          kind: nd.kind ?? null,
+          ring: childRing,
+          nodeType: "satellite",
+          color,
+          nodeSize: NODE_SIZES.satellite,
           hasChildren: false,
-          truncated: false,
           hidden: false,
-          forceLabel: false,
+          extension: nd.extension,
+          size: nd.size,
         });
-      }
 
-      for (const fe of children.fileEdges) {
-        if (g.hasNode(fe.source) && g.hasNode(fe.target)) {
-          g.addEdgeWithKey(fe.id, fe.source, fe.target);
+        // Add edge from parent to this file
+        const edgeRing = getEdgeRing(layout.ringMap.get(dirId) ?? 1, childRing);
+        const edgeId = `${dirId}→${childId}`;
+        if (!g.hasEdge(edgeId)) {
+          g.addEdgeWithKey(edgeId, dirId, childId, { edgeRing });
         }
       }
 
       expandedDirsRef.current.add(dirId);
       s.refresh();
     },
+    [layout, nodeMap],
+  );
+
+  // ── Collapse one directory: remove its file children ──
+  const collapseDir = useCallback(
+    (dirId: string) => {
+      const g = graphRef.current;
+      const s = sigmaRef.current;
+      if (!g || !s || !layout) return;
+
+      const children = layout.childMap.get(dirId);
+      if (!children) return;
+
+      for (const childId of children) {
+        const childRing = layout.ringMap.get(childId);
+        if (childRing !== 3) continue;
+
+        // Also collapse any expanded dust for this file
+        if (expandedFilesRef.current.has(childId)) {
+          collapseFile(childId);
+        }
+
+        if (g.hasNode(childId)) {
+          g.dropNode(childId);
+        }
+      }
+
+      expandedDirsRef.current.delete(dirId);
+      s.refresh();
+    },
+    [layout],
+  );
+
+  // ── Expand one file: fetch changelog, create dust nodes ──
+  const expandFile = useCallback(
+    async (fileId: string) => {
+      const g = graphRef.current;
+      const s = sigmaRef.current;
+      if (!g || !s || !layout) return;
+
+      if (expandedFilesRef.current.has(fileId)) return;
+
+      const fileNode = nodeMap.get(fileId);
+      if (!fileNode) return;
+
+      let changes: ChangeRecord[];
+      // Check cache first
+      const cached = dustCacheRef.current.get(fileId);
+      if (cached) {
+        changes = cached;
+      } else {
+        try {
+          changes = await api.getFileChanges(projectPath, fileNode.path);
+          dustCacheRef.current.set(fileId, changes);
+        } catch {
+          console.warn("Failed to fetch changes for", fileNode.path);
+          return;
+        }
+      }
+
+      if (changes.length === 0) {
+        expandedFilesRef.current.add(fileId); // mark expanded even if empty
+        return;
+      }
+
+      const sector = layout.sectorMap.get(fileId) ?? { start: 0, end: 2 * Math.PI };
+      const dustIds = changes.map((c) => `dust-${c.id}`);
+      const dustPositions = computeDustPositions(dustIds, sector.start, sector.end);
+
+      for (let i = 0; i < changes.length; i++) {
+        const c = changes[i];
+        const dId = `dust-${c.id}`;
+        if (g.hasNode(dId)) continue;
+
+        const pos = dustPositions.get(dId);
+        if (!pos) continue;
+
+        g.addNode(dId, {
+          x: pos.x,
+          y: pos.y,
+          label: `${formatChangeKind(c.kind)} ${shortTimestamp(c.timestamp)}`,
+          path: c.filePath,
+          kind: null,
+          ring: 4,
+          nodeType: "dust",
+          color: NODE_COLORS.dust,
+          nodeSize: NODE_SIZES.dust,
+          hasChildren: false,
+          hidden: false,
+          changeKind: c.kind,
+          changeTimestamp: c.timestamp,
+          changeSummary: c.summary,
+        });
+
+        // Edge from file to dust
+        const edgeId = `${fileId}→${dId}`;
+        if (!g.hasEdge(edgeId)) {
+          g.addEdgeWithKey(edgeId, fileId, dId, { edgeRing: 3 });
+        }
+      }
+
+      expandedFilesRef.current.add(fileId);
+      s.refresh();
+    },
+    [layout, nodeMap, projectPath],
+  );
+
+  // ── Collapse one file: remove dust nodes ──
+  const collapseFile = useCallback(
+    (fileId: string) => {
+      const g = graphRef.current;
+      const s = sigmaRef.current;
+      if (!g || !s) return;
+
+      const dustPrefix = `dust-`;
+      const toRemove: string[] = [];
+      g.forEachNode((nodeId) => {
+        if (nodeId.startsWith(dustPrefix)) {
+          // Check if this dust is connected to fileId
+          const edges = g.edges(nodeId);
+          for (const e of edges) {
+            const src = g.source(e);
+            const tgt = g.target(e);
+            if (src === fileId || tgt === fileId) {
+              toRemove.push(nodeId);
+              break;
+            }
+          }
+        }
+      });
+
+      for (const nid of toRemove) {
+        g.dropNode(nid);
+      }
+
+      expandedFilesRef.current.delete(fileId);
+      s.refresh();
+    },
     [],
   );
 
+  // ── Expand / Collapse all ──
+  const handleExpandAll = useCallback(() => {
+    if (!layout) return;
+    for (const [nodeId, ring] of layout.ringMap) {
+      if ((ring === 1 || ring === 2) && (layout.childMap.get(nodeId)?.length ?? 0) > 0) {
+        expandDir(nodeId);
+      }
+    }
+  }, [layout, expandDir]);
+
+  const handleCollapseAll = useCallback(() => {
+    // Collapse files first (removes dust), then dirs
+    const filesToCollapse = new Set(expandedFilesRef.current);
+    for (const fid of filesToCollapse) collapseFile(fid);
+
+    const dirsToCollapse = new Set(expandedDirsRef.current);
+    for (const did of dirsToCollapse) collapseDir(did);
+  }, [collapseDir, collapseFile]);
+
   // ── Main init effect ──
   useEffect(() => {
-    if (!layers || !containerRef.current) return;
+    if (!layout || !containerRef.current || !graphData) return;
 
     // Cleanup
     if (sigmaRef.current) {
       sigmaRef.current.kill();
       sigmaRef.current = null;
     }
-    killForce();
 
     expandedDirsRef.current = new Set();
-    childMapRef.current = layers.childMap;
-    highlightRef.current = null;
+    expandedFilesRef.current = new Set();
+    dustCacheRef.current = new Map();
 
-    // Create graphology graph
     const g = new Graph({
       multi: false,
       type: "directed",
       allowSelfLoops: false,
     });
 
-    // Add dir nodes with random initial positions
-    const w = containerRef.current.clientWidth || 800;
-    const h = containerRef.current.clientHeight || 600;
-    const spread = Math.min(w, h) * 0.35;
+    // Add Star + Planet + Moon nodes (rings 0-2)
+    for (const [nodeId, pos] of layout.positions) {
+      const nd = nodeMap.get(nodeId);
+      if (!nd) continue;
+      const ring = layout.ringMap.get(nodeId) ?? 0;
+      if (ring > 2) continue; // skip files & dust initially
 
-    for (const n of layers.dirNodes) {
-      g.addNode(n.id, {
-        x: Math.random() * spread * 2 - spread,
-        y: Math.random() * spread * 2 - spread,
-        label: n.label,
-        path: n.path,
-        kind: n.kind,
-        extension: null,
-        nodeSize: n.nodeSize,
-        color: n.color,
-        hasChildren: n.hasChildren,
-        truncated: n.truncated,
+      const nodeType = getNodeTypeByRing(ring);
+      const color =
+        ring === 0
+          ? NODE_COLORS.star
+          : ring === 1
+            ? NODE_COLORS.planet
+            : NODE_COLORS.moon;
+      const size =
+        ring === 0
+          ? NODE_SIZES.star
+          : ring === 1
+            ? NODE_SIZES.planet
+            : NODE_SIZES.moon;
+      const hasKids = (layout.childMap.get(nodeId)?.length ?? 0) > 0;
+
+      g.addNode(nodeId, {
+        x: pos.x,
+        y: pos.y,
+        label: nd.label,
+        path: nd.path,
+        kind: nd.kind ?? null,
+        ring,
+        nodeType,
+        color,
+        nodeSize: size,
+        hasChildren: hasKids,
         hidden: false,
-        forceLabel: false,
       });
     }
 
-    // Add dir→dir edges
-    for (const e of layers.dirEdges) {
-      if (g.hasNode(e.source) && g.hasNode(e.target)) {
-        g.addEdgeWithKey(e.id, e.source, e.target);
-      }
+    // Add edges for visible nodes (both endpoints visible)
+    for (const e of graphData.edges) {
+      if (!g.hasNode(e.source) || !g.hasNode(e.target)) continue;
+      const sRing = layout.ringMap.get(e.source) ?? 0;
+      const tRing = layout.ringMap.get(e.target) ?? 0;
+      const er = getEdgeRing(sRing, tRing);
+      g.addEdgeWithKey(e.id, e.source, e.target, { edgeRing: er });
     }
 
-    // Create Sigma WebGL renderer (Sigma v3 auto-detects WebGL)
+    // ── Sigma WebGL renderer ──
     const s = new Sigma(g, containerRef.current, {
       allowInvalidContainer: true,
-      stagePadding: 30,
+      stagePadding: 40,
       renderLabels: false,
       renderEdgeLabels: false,
       enableEdgeEvents: false,
       labelFont: "Georgia, system-ui, sans-serif",
       labelSize: 9,
-      labelDensity: 0.3,
-      labelRenderedSizeThreshold: 4,
-      minCameraRatio: 0.05,
-      maxCameraRatio: 8,
-      // Prefer color from node attributes
+      labelDensity: 0.25,
+      labelRenderedSizeThreshold: 3,
+      minCameraRatio: 0.02,
+      maxCameraRatio: 14,
       defaultNodeColor: "#555",
-      defaultEdgeColor: "rgba(255,255,255,0.05)",
-      minEdgeThickness: 0.3,
+      defaultEdgeColor: ORBIT_COLOR,
       autoRescale: true,
       autoCenter: true,
-      // Node reducer: derive display from attributes
+
       nodeReducer: (_node, data) => {
-        const nd = data as NodeAttr;
+        const nd = data as unknown as GraphNodeAttr;
         let color = nd.color;
         let size = nd.nodeSize;
-
-        // Highlight dimming
-        if (highlightRef.current && !highlightRef.current.neighbors.has(_node)) {
-          color = "oklch(6% 0.002 260)";
-          size = size * 0.3;
-        }
 
         return {
           label: nd.hidden ? "" : "",
           size,
           color,
-          forceLabel: nd.forceLabel || false,
-          type: "circle",
+          type: "circle" as const,
         };
       },
+
       edgeReducer: (_edge, data) => {
-        const ea = data as Attributes;
+        const edgeRing = (data as { edgeRing?: number }).edgeRing ?? 2;
+        const thickness = EDGE_THICKNESS[edgeRing] ?? 0.3;
         return {
-          size: 0.3,
-          color: ea.color || "rgba(255,255,255,0.05)",
-          forceLabel: false,
-          type: "line",
+          size: thickness,
+          color: ORBIT_COLOR,
+          type: "line" as const,
         };
       },
     });
 
-    // ── Event bindings ──
+    // ── Events ──
 
-    // Zoom/pan → show/hide labels based on zoom ratio
+    // Label visibility toggle on zoom
     const updateLabelVisibility = () => {
       const ratio = s.getCamera().getState().ratio;
       if (ratio > LABEL_ZOOM_THRESHOLD) {
         if (!s.getSetting("renderLabels")) {
-          s.setSetting("renderLabels", true);
+          try { s.setSetting("renderLabels", true); } catch { /* ok */ }
           setLabelsVisible(true);
         }
       } else {
         if (s.getSetting("renderLabels")) {
-          s.setSetting("renderLabels", false);
+          try { s.setSetting("renderLabels", false); } catch { /* ok */ }
           setLabelsVisible(false);
         }
       }
@@ -448,146 +521,186 @@ export function GraphPage({ projectPath }: GraphPageProps) {
 
     // Tooltip
     s.on("enterNode", ({ node }) => {
-      const nd = g.getNodeAttributes(node) as NodeAttr;
-      const pos = s.graphToViewport({ x: nd.x, y: nd.y });
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
+      try {
+        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
+        const pos = s.graphToViewport({ x: nd.x as number ?? 0, y: nd.y as number ?? 0 });
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
 
-      let kindLabel = nd.kind === "dir" ? "Directory" : "File";
-      if (nd.truncated) kindLabel += " (truncated)";
-      if (nd.kind === "dir" && nd.hasChildren) {
-        kindLabel += expandedDirsRef.current.has(node) ? " · expanded" : " · click to expand";
-      }
-      setTooltip({
-        visible: true,
-        x: pos.x + rect.left + 12,
-        y: pos.y + rect.top - 48,
-        label: nd.label,
-        path: nd.path,
-        kind: kindLabel,
-        size: formatSize(nd.size as number | undefined),
-      });
+        let kindLabel = "";
+        const nt = nd.nodeType;
+        if (nt === "star") kindLabel = "Project Root";
+        else if (nt === "planet") {
+          kindLabel = nd.hasChildren ? "Directory · click to explore" : "Directory";
+        } else if (nt === "moon") {
+          kindLabel = nd.hasChildren ? "Sub-directory · click to explore" : "Sub-directory";
+        } else if (nt === "satellite") {
+          kindLabel = "File · double-click for diff";
+          if (expandedFilesRef.current.has(node)) kindLabel += " · dust visible";
+        } else if (nt === "dust") {
+          kindLabel = nd.changeKind
+            ? `Change · ${nd.changeKind} @ ${shortTimestamp(nd.changeTimestamp ?? "")}`
+            : "Change record";
+        }
+
+        setTooltip({
+          visible: true,
+          x: pos.x + rect.left + 14,
+          y: pos.y + rect.top - 48,
+          label: nd.label,
+          path: nd.path,
+          kind: kindLabel,
+          size: nt === "satellite" ? formatSize(nd.size) : "",
+        });
+      } catch { /* node may have been removed */ }
     });
 
     s.on("leaveNode", () => {
       setTooltip((prev) => ({ ...prev, visible: false }));
     });
 
-    // Click node → neighborhood highlight
+    // ── Click: expand planet/moon or show dust for satellite ──
     s.on("clickNode", ({ node }) => {
-      const neighbors = new Set<string>();
-      neighbors.add(node);
-      g.forEachNeighbor(node, (n: string) => neighbors.add(n));
-      highlightRef.current = { neighbors };
-      s.refresh();
+      try {
+        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
+        const ring = nd.ring;
+
+        if (ring === 1 || ring === 2) {
+          // Planet or Moon → toggle expand
+          if (expandedDirsRef.current.has(node)) {
+            collapseDir(node);
+          } else {
+            expandDir(node);
+            // Animate camera to zoom on this planet
+            const x = nd.x as number ?? 0;
+            const y = nd.y as number ?? 0;
+            s.getCamera().animate({ x, y, ratio: 0.8 }, { duration: 400 });
+          }
+        } else if (ring === 3) {
+          // Satellite → toggle dust
+          if (expandedFilesRef.current.has(node)) {
+            collapseFile(node);
+          } else {
+            expandFile(node);
+          }
+        }
+      } catch { /* node may have been removed */ }
     });
 
-    // Click stage → clear highlight
-    s.on("clickStage", () => {
-      if (highlightRef.current) {
-        highlightRef.current = null;
-        s.refresh();
-      }
-    });
-
-    // Double-click → expand/collapse dir
+    // ── Double-click: collapse or diff preview ──
     s.on("doubleClickNode", ({ node }) => {
-      const nd = g.getNodeAttributes(node) as NodeAttr;
-      if (nd.kind !== "dir" || !nd.hasChildren) return;
+      try {
+        const nd = g.getNodeAttributes(node) as unknown as GraphNodeAttr;
+        const ring = nd.ring;
 
-      if (expandedDirsRef.current.has(node)) {
-        collapseDir(node, g);
-        s.refresh();
-      } else {
-        expandDir(node, g, s);
-        // Small local force sim to settle new nodes
-        startForce(g, FORCE_LOCAL_ITER, {
-          repulsion: 2000,
-          attraction: 0.01,
-          gravity: 0.02,
-          damping: 0.8,
-        });
-      }
+        if (ring === 1 || ring === 2) {
+          if (expandedDirsRef.current.has(node)) {
+            collapseDir(node);
+          }
+        } else if (ring === 3) {
+          // Double-click file → log path for diff (placeholder)
+          console.log("[CodeObservatory] Diff view reserved for:", nd.path);
+          if (expandedFilesRef.current.has(node)) {
+            collapseFile(node);
+          }
+        }
+      } catch { /* ok */ }
     });
 
-    // Fit to screen on load
+    // ── Click stage → reset camera to root ──
+    s.on("clickStage", () => {
+      // No-op; user can use Root button
+    });
+
+    // Fit to screen
     setTimeout(() => s.getCamera().animatedReset({ duration: 300 }), 100);
 
     sigmaRef.current = s;
     graphRef.current = g;
 
-    // Start force simulation for initial layout
-    startForce(g, FORCE_MAX_ITER);
-
     return () => {
-      killForce();
       if (sigmaRef.current) {
         sigmaRef.current.kill();
         sigmaRef.current = null;
       }
     };
-  }, [layers]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout]);
 
   // ── Toolbar handlers ──
   const handleFit = useCallback(() => {
     sigmaRef.current?.getCamera().animatedReset({ duration: 300 });
   }, []);
 
-  const handleForceRestart = useCallback(() => {
-    const g = graphRef.current;
-    if (!g || g.order === 0) return;
-    killForce();
-
-    // Randomize positions
-    const w = containerRef.current?.clientWidth ?? 800;
-    const h = containerRef.current?.clientHeight ?? 600;
-    const spread = Math.min(w, h) * 0.3;
-    g.forEachNode((node) => {
-      g.setNodeAttribute(node, "x", Math.random() * spread * 2 - spread);
-      g.setNodeAttribute(node, "y", Math.random() * spread * 2 - spread);
-    });
-    sigmaRef.current?.refresh();
-    startForce(g, FORCE_MAX_ITER);
-  }, [killForce, startForce]);
+  const handleRoot = useCallback(() => {
+    const s = sigmaRef.current;
+    if (!s) return;
+    s.getCamera().animate({ x: 0, y: 0, ratio: 1 }, { duration: 500 });
+  }, []);
 
   return (
     <div className="flex flex-col h-full co-graph-bg">
       {/* ── Toolbar ── */}
       <div className="co-graph-toolbar">
         <div className="co-graph-toolbar-left">
-          <span className="co-graph-badge">
-            <svg width="6" height="6" viewBox="0 0 6 6">
-              <circle cx="3" cy="3" r="3" fill={NODE_COLORS.dir} />
+          {/* Star count */}
+          <span className="co-graph-badge co-graph-badge-star">
+            <svg width="8" height="8" viewBox="0 0 8 8">
+              <circle cx="4" cy="4" r="3.5" fill={NODE_COLORS.star} />
             </svg>
-            {dirCount}
+            {starCount}
           </span>
-          <span className="co-graph-badge">
-            <svg width="6" height="6" viewBox="0 0 6 6">
-              <circle cx="3" cy="3" r="3" fill={NODE_COLORS.ts} />
+          {/* Planet count */}
+          <span className="co-graph-badge co-graph-badge-planet">
+            <svg width="7" height="7" viewBox="0 0 7 7">
+              <circle cx="3.5" cy="3.5" r="3" fill={NODE_COLORS.planet} />
             </svg>
-            {fileCount}
+            {planetCount}
           </span>
-          <span className="co-graph-badge">{edgeCount} edges</span>
+          {/* Moon count */}
+          <span className="co-graph-badge co-graph-badge-moon">
+            <svg width="5" height="5" viewBox="0 0 5 5">
+              <circle cx="2.5" cy="2.5" r="2" fill={NODE_COLORS.moon} />
+            </svg>
+            {moonCount}
+          </span>
+          {/* File count */}
+          <span className="co-graph-badge">{fileCount} files</span>
+          {/* Expanded count */}
+          {expandedDirsRef.current.size > 0 && (
+            <span className="co-graph-badge" style={{ color: "var(--co-accent-text)" }}>
+              {expandedDirsRef.current.size} expanded
+            </span>
+          )}
           {labelsVisible && (
             <span className="co-graph-badge" style={{ color: "var(--co-text-muted)" }}>
               labels
             </span>
           )}
-          {isVeryLarge && (
-            <span className="co-graph-badge" style={{ color: "oklch(60% 0.18 20)" }} title="Large graph — dir-only">
-              dir-only
-            </span>
-          )}
         </div>
 
         <div className="co-graph-toolbar-right">
-          <button className="co-graph-icon-btn" onClick={handleForceRestart} title="Restart force layout">
-            <Zap size={13} />
+          <button
+            className="co-graph-icon-btn"
+            onClick={handleExpandAll}
+            title="Expand all directories (show files)"
+          >
+            <ChevronDown size={14} />
+          </button>
+          <button
+            className="co-graph-icon-btn"
+            onClick={handleCollapseAll}
+            title="Collapse all (hide files & dust)"
+          >
+            <ChevronUp size={14} />
+          </button>
+          <button className="co-graph-icon-btn" onClick={handleRoot} title="Return to root (Star)">
+            <Home size={13} />
           </button>
           <button className="co-graph-icon-btn" onClick={handleFit} title="Fit to screen">
             <Maximize2 size={13} />
           </button>
-          <button className="co-graph-icon-btn" onClick={refresh} disabled={loading} title="Rescan">
+          <button className="co-graph-icon-btn" onClick={refresh} disabled={loading} title="Rescan project">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
@@ -595,28 +708,24 @@ export function GraphPage({ projectPath }: GraphPageProps) {
 
       {/* ── Canvas ── */}
       <div className="co-graph-canvas-wrapper">
-        {isHuge && (
-          <div className="co-graph-warning">
-            <span>
-              ⚠ {totalCount} nodes — very large project. Directory-only view active.
-            </span>
-          </div>
-        )}
-
         {loading && !graphData ? (
           <div className="co-graph-loading">
             <div className="co-graph-loading-spinner" />
-            <p className="co-graph-loading-text">Scanning files...</p>
+            <p className="co-graph-loading-text">Scanning project...</p>
           </div>
         ) : graphData && graphData.nodes.length === 0 ? (
           <div className="co-graph-empty">
-            <p className="co-graph-empty-title">Empty</p>
-            <p className="co-graph-empty-desc">This directory contains no files or folders.</p>
+            <p className="co-graph-empty-title">Empty Project</p>
+            <p className="co-graph-empty-desc">
+              This directory contains no files or folders.
+            </p>
           </div>
         ) : !projectPath ? (
           <div className="co-graph-empty">
             <p className="co-graph-empty-title">No Project</p>
-            <p className="co-graph-empty-desc">Open a project to visualize its file graph.</p>
+            <p className="co-graph-empty-desc">
+              Open a project to visualize its galaxy graph.
+            </p>
           </div>
         ) : (
           <div ref={containerRef} className="co-graph-sigma-container" />
