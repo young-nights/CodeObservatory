@@ -50,7 +50,7 @@ function toFGData(nodes: FileNode[], edges: FileEdge[], isDark: boolean) {
   return {
     nodes: nodes.map(n => {
       const isR = n.id === root?.id; const d = depth.get(n.id) ?? 99; const ex = n.extension?.toLowerCase() ?? "";
-      return { id: n.id, name: n.label, path: n.path, type: isR ? "root" : n.kind === "dir" ? "dir" : "file", color: isR ? clr.root : n.kind === "dir" ? (d===1 ? clr.dirCyan : clr.dirPurple) : (clr.file[ex] || clr.defaultFile), val: isR ? 16 : n.kind === "dir" ? (d===1 ? 8 : 5) : 3, extension: n.extension, size: n.size } as FGNode;
+      return { id: n.id, name: n.label, path: n.path, type: isR ? "root" : n.kind === "dir" ? "dir" : "file", color: isR ? clr.root : n.kind === "dir" ? (d===1 ? clr.dirCyan : clr.dirPurple) : (clr.file[ex] || clr.defaultFile), val: isR ? 50 : n.kind === "dir" ? (d===1 ? 6 : 4) : 2, extension: n.extension, size: n.size } as FGNode;
     }),
     links: edges.map(e => ({ source: e.source, target: e.target } as FGLink)),
   };
@@ -78,7 +78,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:0.8, edgeOpacity:0.10, bloomStrength:2.5, chargeStrength:-300, linkDistance:6, linkStrength:0.6, centerGravity:0.8 };
+const DEFS: GalaxySettings = { nodeSize:0.8, edgeOpacity:0.10, bloomStrength:2.5, chargeStrength:-400, linkDistance:4, linkStrength:0.7, centerGravity:1.0 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -139,10 +139,10 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   // 3D node
   const nodeObj = useCallback((node: any) => {
     const n = node as FGNode; const g = new THREE.Group();
-    const r = n.type === "root" ? 1.2 : n.type === "dir" ? 0.4 : 0.15;
+    const r = n.type === "root" ? 3.0 : n.type === "dir" ? 0.3 : 0.12;
     const s = r * settings.nodeSize; const segs = n.type === "file" ? 8 : 24;
     const geo = new THREE.SphereGeometry(s, segs, segs);
-    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 4.0 : n.type === "dir" ? 1.8 : 1.0, roughness: 0.15, metalness: 0.03, toneMapped: false });
+    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 6.0 : n.type === "dir" ? 1.5 : 0.8, roughness: 0.1, metalness: 0.02, toneMapped: false });
     g.add(new THREE.Mesh(geo, mat));
     // Bigger, brighter ring for dirs
     if (n.type !== "file") {
