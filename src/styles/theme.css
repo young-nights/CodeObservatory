@@ -1,0 +1,230 @@
+/* CodeObservatory Dark Space Theme
+ * Plain CSS classes for colors, backgrounds, and effects.
+ * Used alongside Tailwind layout utilities (flex, grid, spacing, etc.)
+ */
+
+/* ============================================
+   Background & Base
+   ============================================ */
+.co-bg-main {
+  background: linear-gradient(135deg, #0f172a 0%, #0f172a 40%, #1e1b4b 100%);
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+.co-sidebar {
+  background: rgba(2, 6, 23, 0.9);
+  border-right: 1px solid rgba(51, 65, 85, 0.5);
+  backdrop-filter: blur(12px);
+}
+
+.co-sidebar-brand {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.35);
+}
+
+.co-sidebar-footer {
+  border-top: 1px solid rgba(51, 65, 85, 0.35);
+}
+
+.co-sidebar-text {
+  color: #e2e8f0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================
+   Navigation Items
+   ============================================ */
+.co-nav-item {
+  color: #94a3b8;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.co-nav-item:hover {
+  color: #cbd5e1;
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.co-nav-item-active {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.co-nav-item-active:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.co-nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: #818cf8;
+  border-radius: 0 3px 3px 0;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.co-header-title {
+  color: #f1f5f9;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.co-divider {
+  border: none;
+  border-top: 1px solid rgba(51, 65, 85, 0.4);
+}
+
+/* ============================================
+   Button: Primary CTA
+   ============================================ */
+.co-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.co-btn-primary:hover {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+.co-btn-primary:active {
+  transform: translateY(0);
+}
+
+.co-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ============================================
+   Project Cards
+   ============================================ */
+.co-card {
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.co-card:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+.co-card-folder-icon {
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.co-card:hover .co-card-folder-icon {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.co-card-title {
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.co-card-path {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.co-card-time {
+  color: #475569;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Text Styles
+   ============================================ */
+.co-text-primary { color: #e2e8f0; }
+.co-text-secondary { color: #94a3b8; }
+.co-text-muted { color: #64748b; }
+.co-text-dim { color: #475569; }
+.co-text-accent { color: #818cf8; }
+
+.co-text-accent-lg {
+  color: #a5b4fc;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* ============================================
+   Section Label
+   ============================================ */
+.co-section-label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.co-project-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+/* ============================================
+   Empty State
+   ============================================ */
+.co-empty-icon {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(51, 65, 85, 0.3);
+}
+
+.co-empty-text {
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ============================================
+   Settings Placeholder
+   ============================================ */
+.co-settings-placeholder-text {
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* ============================================
+   App Logo Badge
+   ============================================ */
+.co-logo-badge {
+  background: linear-gradient(135deg, #6366f1, #7c3aed);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
