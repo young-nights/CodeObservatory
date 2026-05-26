@@ -39,6 +39,10 @@ export interface FileNode {
   size?: number;
   /** Last modification time as ISO 8601; present only in scan results */
   modified?: string;
+  /** Whether this directory contains children (files or subdirs) */
+  hasChildren?: boolean;
+  /** Whether directory scan was truncated at max_depth */
+  truncated?: boolean;
 }
 
 export interface FileEdge {

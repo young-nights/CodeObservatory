@@ -24,6 +24,12 @@ pub struct FileNode {
     /// Last modification time as ISO 8601 string; present only in scan_directory results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified: Option<String>,
+    /// Whether this directory contains children (files or subdirs); computed post-scan
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_children: Option<bool>,
+    /// Whether directory scan was truncated at max_depth
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncated: Option<bool>,
 }
 
 /// An edge between two files in the graph
@@ -105,8 +111,11 @@ const SPECIAL_FILENAMES: &[&str] = &[
 ];
 
 /// Recursively scan a project directory and build a file/directory relationship graph.
+/// `max_depth` limits directory nesting below project root (default: 4).
+/// Directories beyond max_depth are marked `truncated: true` and not recursed into.
 #[tauri::command]
-pub fn scan_directory(project_path: String) -> Result<GraphData, String> {
+pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<GraphData, String> {
+    let max_depth = max_depth.unwrap_or(4);
     let root = PathBuf::from(&project_path);
     if !root.exists() {
         return Err(format!("Path does not exist: {}", project_path));
@@ -134,10 +143,23 @@ pub fn scan_directory(project_path: String) -> Result<GraphData, String> {
         extension: None,
         size: None,
         modified: root_modified,
+        has_children: None,
+        truncated: None,
     });
 
-    walk_dir(&root, &project_path, &project_path, &mut nodes, &mut edges, &mut edge_idx)
+    walk_dir(&root, &project_path, &project_path, &mut nodes, &mut edges, &mut edge_idx, 0, max_depth)
         .map_err(|e| format!("Failed to scan directory: {}", e))?;
+
+    // Post-processing: mark directories that have children
+    let mut has_kids: HashMap<String, bool> = HashMap::new();
+    for edge in &edges {
+        has_kids.insert(edge.source.clone(), true);
+    }
+    for node in &mut nodes {
+        if node.kind.as_deref() == Some("dir") {
+            node.has_children = Some(has_kids.contains_key(&node.id));
+        }
+    }
 
     Ok(GraphData { nodes, edges })
 }
@@ -166,6 +188,8 @@ fn should_track_file(name: &str, ext: &Option<String>) -> bool {
 }
 
 /// Recursively walk a directory, collecting nodes and edges.
+/// `depth` is the current nesting level (root = 0).
+/// Directories at `depth >= max_depth` are marked truncated and not recursed into.
 fn walk_dir(
     dir: &PathBuf,
     root_prefix: &str,
@@ -173,6 +197,8 @@ fn walk_dir(
     nodes: &mut Vec<FileNode>,
     edges: &mut Vec<FileEdge>,
     edge_idx: &mut u32,
+    depth: u32,
+    max_depth: u32,
 ) -> std::io::Result<()> {
     let entries = std::fs::read_dir(dir)?;
 
@@ -193,6 +219,8 @@ fn walk_dir(
             let dir_id = full_path.to_string_lossy().to_string();
             let modified = get_modified_iso(&full_path);
 
+            let truncated = depth >= max_depth;
+
             nodes.push(FileNode {
                 id: dir_id.clone(),
                 label: name_str.clone(),
@@ -202,6 +230,8 @@ fn walk_dir(
                 extension: None,
                 size: None,
                 modified,
+                has_children: None,
+                truncated: Some(truncated),
             });
 
             edges.push(FileEdge {
@@ -213,8 +243,10 @@ fn walk_dir(
             });
             *edge_idx += 1;
 
-            // Recurse into subdirectory
-            walk_dir(&full_path, root_prefix, &dir_id, nodes, edges, edge_idx)?;
+            // Recurse into subdirectory only if not at max depth
+            if !truncated {
+                walk_dir(&full_path, root_prefix, &dir_id, nodes, edges, edge_idx, depth + 1, max_depth)?;
+            }
         } else if file_type.is_file() {
             let ext = full_path
                 .extension()
@@ -238,6 +270,8 @@ fn walk_dir(
                 extension: ext,
                 size,
                 modified,
+                has_children: None,
+                truncated: None,
             });
 
             edges.push(FileEdge {

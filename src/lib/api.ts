@@ -71,7 +71,8 @@ export async function buildGraph(projectPath: string): Promise<GraphData> {
   return invoke<GraphData>("build_graph", { projectPath });
 }
 
-/** Scan project directory and build a cosmic file/directory graph */
-export async function scanDirectory(projectPath: string): Promise<GraphData> {
-  return invoke<GraphData>("scan_directory", { projectPath });
+/** Scan project directory and build a cosmic file/directory graph.
+ *  maxDepth limits directory nesting below project root (default 4 */
+export async function scanDirectory(projectPath: string, maxDepth = 4): Promise<GraphData> {
+  return invoke<GraphData>("scan_directory", { projectPath, maxDepth });
 }
