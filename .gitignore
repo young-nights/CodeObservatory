@@ -6,3 +6,5 @@ src-tauri/target/
 *.log
 .DS_Store
 tsconfig.tsbuildinfo
+.next/
+next-env.d.ts
