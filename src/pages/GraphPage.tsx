@@ -1,8 +1,5 @@
-// GraphPage — Deep Space Galaxy container
-// Uses CosmicProjectGalaxy for immersive 3D visualization
-
 import { useContext } from "react";
-import CosmicProjectGalaxy from "@/components/graph/CosmicProjectGalaxy";
+import ProjectGalaxy from "@/components/graph/ProjectGalaxy";
 import { SidebarContext } from "@/components/layout/AppShell";
 
 interface GraphPageProps {
@@ -11,11 +8,5 @@ interface GraphPageProps {
 
 export function GraphPage({ projectPath }: GraphPageProps) {
   const { collapsed } = useContext(SidebarContext);
-
-  return (
-    <CosmicProjectGalaxy
-      projectPath={projectPath}
-      fullscreen={collapsed}
-    />
-  );
+  return <ProjectGalaxy projectPath={projectPath} fullscreen={collapsed} />;
 }
