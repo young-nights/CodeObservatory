@@ -1,165 +1,237 @@
-// Graph — Cosmic Galaxy · Three.js R3F 3D visualization
-// Spiral galaxy layout with star nodes, bloom effects, and orbit controls
+// Graph — Cosmic Seed Universe · 3D visualization
+// Full-screen when sidebar collapsed, bottom info bar, tag panel, search
 
 import { useState, useCallback, useMemo } from "react";
-import { RefreshCw, Maximize2 } from "lucide-react";
+import { RefreshCw, Maximize2, Search, X } from "lucide-react";
 import { useScanGraph } from "@/hooks/useObservatory";
-import {
-  GraphPanel,
-  type ColorScheme,
-} from "@/components/graph/GraphPanel";
-import { CosmicGalaxy } from "@/components/graph/CosmicGalaxy";
+import { CosmicGalaxy, type CosmicGalaxyPanelSettings } from "@/components/graph/CosmicGalaxy";
 
 interface GraphPageProps {
   projectPath: string;
 }
 
+interface TopDir {
+  id: string;
+  label: string;
+  count: number;
+  position: [number, number, number];
+}
+
 export function GraphPage({ projectPath }: GraphPageProps) {
   const { graph: graphData, loading, refresh } = useScanGraph(projectPath);
 
-  // ── Panel state ──
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showOnlyChanged, setShowOnlyChanged] = useState(false);
-  const [showOrphans, setShowOrphans] = useState(false);
-  const [colorScheme, setColorScheme] = useState<ColorScheme>("filetype");
-  const [nodeSizeVal, setNodeSizeVal] = useState(7);
-  const [edgeThicknessVal, setEdgeThicknessVal] = useState(0.5);
-  const [textOpacity, setTextOpacity] = useState(0);
-  const [gravity, setGravity] = useState(5);
-  const [repulsion, setRepulsion] = useState(10);
-  const [attraction, setAttraction] = useState(3);
-  const [edgeLength, setEdgeLength] = useState(5);
+  // ── Graph settings ──
+  const [nodeSizeVal] = useState(7);
+  const [edgeThicknessVal] = useState(0.5);
+  const [gravity] = useState(5);
+  const [repulsion] = useState(10);
+  const [edgeLength] = useState(5);
 
-  // ── Filter stats (updated by CosmicGalaxy) ──
+  // ── Filter state ──
   const [visibleNodeCount, setVisibleNodeCount] = useState(0);
   const [visibleEdgeCount, setVisibleEdgeCount] = useState(0);
-
-  // ── Camera reset key ──
   const [cameraResetKey, setCameraResetKey] = useState(0);
 
-  // ── Total stats (before filtering) ──
+  // ── Search ──
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // ── Tag panel ──
+  const [topDirs, setTopDirs] = useState<TopDir[]>([]);
+
+  // ── Camera fly-to ──
+  const [flyTarget, setFlyTarget] = useState<[number, number, number] | null>(null);
+
+  // ── Total stats ──
   const totalNodeCount = graphData?.nodes.length ?? 0;
   const totalEdgeCount = graphData?.edges.length ?? 0;
 
-  // ── Panel settings object (memoised to avoid object identity changes) ──
-  const panelSettings = useMemo(() => ({
-    nodeSize: nodeSizeVal,
-    edgeThickness: edgeThicknessVal,
-    gravity,
-    repulsion,
-    edgeLength,
-  }), [nodeSizeVal, edgeThicknessVal, gravity, repulsion, edgeLength]);
+  // ── Panel settings ──
+  const panelSettings: CosmicGalaxyPanelSettings = useMemo(
+    () => ({ nodeSize: nodeSizeVal, edgeThickness: edgeThicknessVal, gravity, repulsion, edgeLength }),
+    [nodeSizeVal, edgeThicknessVal, gravity, repulsion, edgeLength],
+  );
 
   // ── Actions ──
-  const handleFit = useCallback(() => {
-    setCameraResetKey((k) => k + 1);
-  }, []);
+  const handleFit = useCallback(() => setCameraResetKey((k) => k + 1), []);
 
-  const handleRescan = useCallback(() => {
-    refresh();
-  }, [refresh]);
+  const handleRescan = useCallback(() => refresh(), [refresh]);
+
+  const handleFlyToNode = useCallback((dirId: string) => {
+    const dir = topDirs.find((d) => d.id === dirId);
+    if (dir) {
+      setFlyTarget(dir.position);
+    }
+  }, [topDirs]);
+
+  const displayNodes = visibleNodeCount || totalNodeCount;
+  const displayEdges = visibleEdgeCount || totalEdgeCount;
+
+
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#000000" }}>
-      {/* ── Toolbar ── */}
+      {/* ══════ Top Search Bar (glass) ══════ */}
       <div
         style={{
+          position: "absolute",
+          top: 12,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 30,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          height: 40,
-          padding: "0 12px",
-          background: "rgba(255,255,255,0.03)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          gap: 8,
+          padding: "4px 6px 4px 14px",
+          borderRadius: 9999,
+          background: "rgba(255,255,255,0.06)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          border: "1px solid rgba(255,255,255,0.08)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span
+        <Search size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <input
+          type="text"
+          placeholder="搜索文件或目录…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: 180,
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "rgba(255,255,255,0.7)",
+            fontSize: 12,
+            lineHeight: "24px",
+          }}
+          className="placeholder:text-white/20"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
             style={{
-              fontSize: 12,
-              color: "rgba(255,255,255,0.5)",
-              fontVariantNumeric: "tabular-nums",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 20, borderRadius: "50%",
+              background: "rgba(255,255,255,0.1)", border: "none",
+              color: "rgba(255,255,255,0.4)", cursor: "pointer",
             }}
           >
-            {graphData ? (
-              <>
-                <span style={{ color: "rgba(255,255,255,0.7)" }}>
-                  {visibleNodeCount || totalNodeCount}
-                </span>
-                {" "}nodes{"  "}
-                <span style={{ color: "rgba(255,255,255,0.7)" }}>
-                  {visibleEdgeCount || totalEdgeCount}
-                </span>
-                {" "}edges
-              </>
-            ) : (
-              "Waiting…"
-            )}
-          </span>
-        </div>
+            <X size={10} />
+          </button>
+        )}
+      </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <button onClick={handleFit} title="Reset camera"
-            style={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: 26, height: 26, border: "none", borderRadius: 4,
-              background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
-          >
-            <Maximize2 size={13} />
-          </button>
-          <button onClick={handleRescan} disabled={loading} title="Rescan project"
-            style={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: 26, height: 26, border: "none", borderRadius: 4,
-              background: "transparent", color: "rgba(255,255,255,0.4)",
-              cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.3 : 1,
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }
-            }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
-          >
-            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          </button>
+      {/* ══════ Left Tag Panel (seeds) ══════ */}
+      <div
+        className="co-cosmic-tag-panel"
+        style={{
+          position: "absolute",
+          left: 12,
+          top: 48,
+          zIndex: 25,
+          width: 160,
+        }}
+      >
+        <div className="co-cosmic-tag-card">
+          <h3 className="co-cosmic-tag-title">种子目录</h3>
+          <div className="co-cosmic-tag-grid">
+            {topDirs.length === 0 && (
+              <span className="co-cosmic-tag-empty">扫描中…</span>
+            )}
+            {topDirs.map((dir) => (
+              <button
+                key={dir.id}
+                className="co-cosmic-tag-btn"
+                onClick={() => handleFlyToNode(dir.id)}
+                title={dir.label}
+              >
+                <span className="truncate">{dir.label}</span>
+                <span className="co-cosmic-tag-count">{dir.count}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── Canvas ── */}
+      {/* ══════ Action buttons (top right) ══════ */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 30,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+        }}
+      >
+        <button
+          onClick={handleFit}
+          title="Reset camera"
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 30, height: 30, borderRadius: 9999,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)",
+            cursor: "pointer",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+          }}
+        >
+          <Maximize2 size={14} />
+        </button>
+        <button
+          onClick={handleRescan}
+          disabled={loading}
+          title="Rescan project"
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 30, height: 30, borderRadius: 9999,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.4)",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.3 : 1,
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) {
+              e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+              e.currentTarget.style.color = "rgba(255,255,255,0.7)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!loading) {
+              e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+              e.currentTarget.style.color = "rgba(255,255,255,0.4)";
+            }
+          }}
+        >
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+        </button>
+      </div>
+
+      {/* ══════ Canvas Area ══════ */}
       <div style={{ flex: 1, position: "relative", minHeight: 0, overflow: "hidden" }}>
         {/* Loading */}
         {loading && !graphData ? (
-          <div
-            style={{
-              position: "absolute", inset: 0, zIndex: 10,
-              display: "flex", flexDirection: "column", alignItems: "center",
-              justifyContent: "center", gap: 12,
-              background: "#000008",
-            }}
-          >
-            <div
-              style={{
-                width: 24, height: 24, borderRadius: "50%",
-                border: "2px solid rgba(255,255,255,0.08)",
-                borderTopColor: "rgba(255,255,255,0.5)",
-                animation: "co-spin 0.7s linear infinite",
-              }}
-            />
-            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.3)" }}>
+          <div className="co-cosmic-overlay" style={{ background: "#000008" }}>
+            <div className="co-cosmic-spinner" />
+            <p style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginTop: 12 }}>
               Scanning project…
             </p>
           </div>
         ) : graphData && graphData.nodes.length === 0 ? (
-          <div
-            style={{
-              position: "absolute", inset: 0, zIndex: 10,
-              display: "flex", flexDirection: "column", alignItems: "center",
-              justifyContent: "center", background: "#000008",
-            }}
-          >
+          <div className="co-cosmic-overlay" style={{ background: "#000008" }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
               Empty Project
             </p>
@@ -168,13 +240,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
             </p>
           </div>
         ) : !projectPath ? (
-          <div
-            style={{
-              position: "absolute", inset: 0, zIndex: 10,
-              display: "flex", flexDirection: "column", alignItems: "center",
-              justifyContent: "center", background: "#000008",
-            }}
-          >
+          <div className="co-cosmic-overlay" style={{ background: "#000008" }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>
               No Project
             </p>
@@ -188,47 +254,54 @@ export function GraphPage({ projectPath }: GraphPageProps) {
               data={graphData}
               settings={panelSettings}
               searchQuery={searchQuery}
-              showOnlyChanged={showOnlyChanged}
-              showOrphans={showOrphans}
+              showOnlyChanged={false}
+              showOrphans={false}
               resetKey={cameraResetKey}
               onNodeCountChange={(n, e) => {
                 setVisibleNodeCount(n);
                 setVisibleEdgeCount(e);
               }}
-            />
-
-            <GraphPanel
-              open={panelOpen}
-              onToggle={() => setPanelOpen((v) => !v)}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              showOnlyChanged={showOnlyChanged}
-              onShowOnlyChangedChange={setShowOnlyChanged}
-              showOrphans={showOrphans}
-              onShowOrphansChange={setShowOrphans}
-              colorScheme={colorScheme}
-              onColorSchemeChange={setColorScheme}
-              nodeSize={nodeSizeVal}
-              onNodeSizeChange={setNodeSizeVal}
-              edgeThickness={edgeThicknessVal}
-              onEdgeThicknessChange={setEdgeThicknessVal}
-              textOpacity={textOpacity}
-              onTextOpacityChange={setTextOpacity}
-              gravity={gravity}
-              onGravityChange={setGravity}
-              repulsion={repulsion}
-              onRepulsionChange={setRepulsion}
-              attraction={attraction}
-              onAttractionChange={setAttraction}
-              edgeLength={edgeLength}
-              onEdgeLengthChange={setEdgeLength}
-              nodeCount={visibleNodeCount || totalNodeCount}
-              edgeCount={visibleEdgeCount || totalEdgeCount}
-              onAnimate={handleFit}
+              flyTarget={flyTarget}
+              onFlyComplete={() => setFlyTarget(null)}
+              onTopDirsChange={setTopDirs}
             />
           </>
         ) : null}
       </div>
+
+      {/* ══════ Bottom Info Bar ══════ */}
+      {graphData && (
+        <div
+          className="co-cosmic-bottom-bar"
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 30,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "6px 16px",
+            background: "rgba(0,0,0,0.6)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            borderTop: "1px solid rgba(255,255,255,0.05)",
+            fontSize: 11,
+            color: "rgba(255,255,255,0.35)",
+          }}
+        >
+          <span>
+            <span style={{ color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{displayNodes}</span>
+            {" 个文件 · "}
+            <span style={{ color: "rgba(255,255,255,0.6)", fontWeight: 500 }}>{displayEdges}</span>
+            {" 条关联"}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.25)" }}>
+            拖拽旋转 / 滚轮缩放 · 悬浮查看 · 点击详情
+          </span>
+        </div>
+      )}
     </div>
   );
 }

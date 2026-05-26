@@ -2,9 +2,11 @@
 // Sidebar (200px) + TopBar (44px) + Content
 // Obsidian-style collapsible sidebar with localStorage persistence
 
-import { type ReactNode, useState, useCallback } from "react";
+import { createContext, type ReactNode, useState, useCallback } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
+
+export const SidebarContext = createContext<{ collapsed: boolean }>({ collapsed: false });
 
 const STORAGE_KEY = "code-observatory-sidebar-collapsed";
 
@@ -77,15 +79,17 @@ export function AppLayout({
           onExpand={handleExpand}
         />
 
-        <main className="flex-1 overflow-hidden">
-          <div
-            key={activeTab}
-            className="co-animate-fade-in h-full overflow-auto"
-            style={{ scrollbarColor: "var(--co-border) transparent" }}
-          >
-            {children}
-          </div>
-        </main>
+        <SidebarContext.Provider value={{ collapsed }}>
+          <main className="flex-1 overflow-hidden">
+            <div
+              key={activeTab}
+              className="co-animate-fade-in h-full overflow-auto"
+              style={{ scrollbarColor: "var(--co-border) transparent" }}
+            >
+              {children}
+            </div>
+          </main>
+        </SidebarContext.Provider>
       </div>
     </div>
   );
