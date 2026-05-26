@@ -154,6 +154,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
     size: string;
   }>({ visible: false, x: 0, y: 0, label: "", path: "", kind: "", size: "" });
   const [labelsVisible, setLabelsVisible] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
 
   // ── Compute solar layout ──
   const layout = useMemo(
@@ -457,10 +458,21 @@ export function GraphPage({ projectPath }: GraphPageProps) {
       g.addEdgeWithKey(e.id, e.source, e.target, { edgeRing: er });
     }
 
+    // ── Container size guard ──
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      console.warn("[Graph] Container has zero dimensions, skipping Sigma init");
+      setInitError("Container has zero dimensions — is the canvas visible?");
+      graphRef.current = g; // keep graphology ref for cleanup
+      return;
+    }
+
     // ── Sigma WebGL renderer ──
-    const s = new Sigma(g, containerRef.current, {
-      allowInvalidContainer: true,
-      stagePadding: 40,
+    let s: Sigma;
+    try {
+      s = new Sigma(g, containerRef.current, {
+        allowInvalidContainer: true,
+        stagePadding: 40,
       renderLabels: false,
       renderEdgeLabels: false,
       enableEdgeEvents: false,
@@ -477,27 +489,27 @@ export function GraphPage({ projectPath }: GraphPageProps) {
 
       nodeReducer: (_node, data) => {
         const nd = data as unknown as GraphNodeAttr;
-        let color = nd.color;
-        let size = nd.nodeSize;
-
         return {
-          label: nd.hidden ? "" : "",
-          size,
-          color,
-          type: "circle" as const,
+          label: "",
+          size: nd.nodeSize || 5,
+          color: nd.color || "#666",
         };
       },
 
       edgeReducer: (_edge, data) => {
         const edgeRing = (data as { edgeRing?: number }).edgeRing ?? 2;
-        const thickness = EDGE_THICKNESS[edgeRing] ?? 0.3;
         return {
-          size: thickness,
+          size: EDGE_THICKNESS[edgeRing] ?? 0.3,
           color: ORBIT_COLOR,
-          type: "line" as const,
         };
       },
     });
+    } catch (err: any) {
+      console.error("[Graph] Sigma init failed:", err);
+      setInitError(err?.message ?? "Unknown Sigma initialization error");
+      graphRef.current = g;
+      return;
+    }
 
     // ── Events ──
 
@@ -719,6 +731,11 @@ export function GraphPage({ projectPath }: GraphPageProps) {
             <p className="co-graph-empty-desc">
               This directory contains no files or folders.
             </p>
+          </div>
+        ) : initError ? (
+          <div className="co-graph-empty">
+            <p className="co-graph-empty-title">Graph Initialization Error</p>
+            <p className="co-graph-empty-desc">{initError}</p>
           </div>
         ) : !projectPath ? (
           <div className="co-graph-empty">
