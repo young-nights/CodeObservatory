@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 import {
   Settings,
   ChevronDown,
@@ -157,6 +158,7 @@ function AccordionGroup({
 // ══════════════════════════════════════════════════
 
 export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
+  const { t } = useTranslation();
   const { theme: currentTheme } = useTheme();
   const isDark = currentTheme === "dark";
 
@@ -213,7 +215,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
               >
                 <Settings size={13} color={accentColor} />
               </div>
-              <span className="text-sm font-semibold tracking-tight">Settings</span>
+              <span className="text-sm font-semibold tracking-tight">{t("settings.title")}</span>
             </div>
             <div className="flex items-center gap-1">
               {panelExpanded ? (
@@ -236,9 +238,9 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
               >
                 <div className="px-3 py-3">
                   {/* ── Appearance ── */}
-                  <AccordionGroup title="Appearance" icon={Sparkles} defaultOpen={true} isDark={isDark}>
+                  <AccordionGroup title={t("settings.appearance")} icon={Sparkles} defaultOpen={true} isDark={isDark}>
                     <SliderControl
-                      label="Node Size"
+                      label={t("settings.nodeSize")}
                       value={settings.nodeSize}
                       min={0.3}
                       max={3}
@@ -248,7 +250,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       isDark={isDark}
                     />
                     <SliderControl
-                      label="Edge Opacity"
+                      label={t("settings.edgeOpacity")}
                       value={settings.edgeOpacity}
                       min={0.02}
                       max={0.5}
@@ -257,7 +259,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       isDark={isDark}
                     />
                     <SliderControl
-                      label="Bloom Intensity"
+                      label={t("settings.bloom")}
                       value={settings.bloomStrength}
                       min={0.3}
                       max={3}
@@ -268,9 +270,9 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                   </AccordionGroup>
 
                   {/* ── Force ── */}
-                  <AccordionGroup title="Force" icon={SlidersHorizontal} isDark={isDark}>
+                  <AccordionGroup title={t("settings.force")} icon={SlidersHorizontal} isDark={isDark}>
                     <SliderControl
-                      label="Charge"
+                      label={t("settings.charge")}
                       value={settings.chargeStrength}
                       min={-500}
                       max={-20}
@@ -279,7 +281,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       isDark={isDark}
                     />
                     <SliderControl
-                      label="Link Distance"
+                      label={t("settings.linkDistance")}
                       value={settings.linkDistance}
                       min={5}
                       max={80}
@@ -289,7 +291,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       isDark={isDark}
                     />
                     <SliderControl
-                      label="Link Strength"
+                      label={t("settings.linkStrength")}
                       value={settings.linkStrength}
                       min={0.05}
                       max={1}
@@ -298,7 +300,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       isDark={isDark}
                     />
                     <SliderControl
-                      label="Center Gravity"
+                      label={t("settings.centerGravity")}
                       value={settings.centerGravity}
                       min={0.01}
                       max={0.5}
@@ -309,7 +311,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                   </AccordionGroup>
 
                   {/* ── Other ── */}
-                  <AccordionGroup title="Other" icon={Ellipsis} isDark={isDark}>
+                  <AccordionGroup title={t("settings.other")} icon={Ellipsis} isDark={isDark}>
                     <div className="text-xs leading-relaxed" style={{ color: textMuted }}>
                       <p className="mb-2">Drag nodes to reposition them in the galaxy.</p>
                       <p className="mb-2">Scroll to zoom in/out of the cosmic view.</p>
@@ -361,7 +363,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
           >
             <span className="flex items-center gap-1">
               <Gauge size={10} />
-              Real-time preview
+              {t("settings.realTime")}
             </span>
             <button
               onClick={onClose}

@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "PROJECT GALAXY",
+    "subtitle": "planets · stars · orbits",
+    "awaiting": "Awaiting project…",
+    "noData": "No project data",
+    "scanning": "Scanning galaxy…"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "timeline": "Timeline",
+    "graph": "Graph"
+  },
+  "sidebar": {
+    "brand": "CodeObservatory",
+    "version": "v0.1.0",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
+  },
+  "topbar": {
+    "watching": "Watching",
+    "idle": "Idle",
+    "toggleTheme": "Toggle theme",
+    "toggleLang": "Switch language"
+  },
+  "settings": {
+    "title": "Galaxy",
+    "appearance": "Appearance",
+    "force": "Force",
+    "other": "Other",
+    "nodeSize": "Node Size",
+    "edgeOpacity": "Edge Opacity",
+    "bloom": "Bloom",
+    "charge": "Charge",
+    "linkDistance": "Link Distance",
+    "linkStrength": "Link Strength",
+    "centerGravity": "Center Gravity",
+    "reset": "Reset to Defaults",
+    "close": "Close",
+    "realTime": "Real-time preview",
+    "hint": "Drag · Scroll · Click nodes"
+  },
+  "graph": {
+    "resetView": "Reset view",
+    "rescan": "Rescan",
+    "nodeInfo": {
+      "directory": "Directory",
+      "file": "File"
+    }
+  },
+  "project": {
+    "openProject": "Open Project Directory",
+    "recentProjects": "Recent Projects",
+    "selectFirst": "Select your first project to begin tracking code changes",
+    "initializing": "Initializing…"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "app": {
+    "title": "星河项目",
+    "subtitle": "颗星球 · 颗星星 · 条轨道",
+    "awaiting": "等待项目…",
+    "noData": "无项目数据",
+    "scanning": "正在扫描星系…"
+  },
+  "nav": {
+    "dashboard": "仪表盘",
+    "timeline": "时间线",
+    "graph": "图谱"
+  },
+  "sidebar": {
+    "brand": "代码观测站",
+    "version": "v0.1.0",
+    "collapse": "收起侧边栏",
+    "expand": "展开侧边栏"
+  },
+  "topbar": {
+    "watching": "监听中",
+    "idle": "空闲",
+    "toggleTheme": "切换主题",
+    "toggleLang": "切换语言"
+  },
+  "settings": {
+    "title": "图谱设置",
+    "appearance": "外观",
+    "force": "力度",
+    "other": "其他",
+    "nodeSize": "节点大小",
+    "edgeOpacity": "连线透明度",
+    "bloom": "辉光强度",
+    "charge": "排斥力",
+    "linkDistance": "连线距离",
+    "linkStrength": "连线强度",
+    "centerGravity": "中心引力",
+    "reset": "恢复默认",
+    "close": "关闭",
+    "realTime": "实时预览",
+    "hint": "拖拽 · 滚轮 · 点击节点"
+  },
+  "graph": {
+    "resetView": "重置视图",
+    "rescan": "重新扫描",
+    "nodeInfo": {
+      "directory": "文件夹",
+      "file": "文件"
+    }
+  },
+  "project": {
+    "openProject": "打开项目目录",
+    "recentProjects": "最近项目",
+    "selectFirst": "选择你的第一个项目开始追踪代码变更",
+    "initializing": "初始化中…"
+  }
+}

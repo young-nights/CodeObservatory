@@ -1,8 +1,9 @@
 // TopBar — Sci-fi minimal top bar
 // 44px, clean, watcher status indicator
 
-import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon } from "lucide-react";
+import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon, Globe } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 
 interface TopBarProps {
   projectName?: string;
@@ -18,6 +19,7 @@ export function TopBar({
   onExpand,
 }: TopBarProps) {
   const { theme, toggle } = useTheme();
+  const { t, i18n } = useTranslation();
   const isDark = theme === "dark";
 
   const bg = isDark ? "#0c0c10" : "#fafafa";
@@ -75,13 +77,30 @@ export function TopBar({
         )}
       </div>
 
-      {/* Right section — Theme toggle + Watcher status */}
-      <div className="flex items-center gap-3 shrink-0">
+      {/* Right section — Theme toggle + Lang toggle + Watcher status */}
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Language toggle */}
+        <button
+          onClick={() => i18n.changeLanguage(i18n.language === "en" ? "zh" : "en")}
+          className="flex items-center justify-center w-7 h-6 rounded text-xs font-semibold transition-colors"
+          title={t("topbar.toggleLang")}
+          style={{ color: textDim, fontFamily: "system-ui, sans-serif" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = textSecondary;
+            e.currentTarget.style.background = hoverBg;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = textDim;
+            e.currentTarget.style.background = "transparent";
+          }}
+        >
+          {i18n.language === "en" ? "中" : "EN"}
+        </button>
         {/* Theme toggle */}
         <button
           onClick={toggle}
           className="flex items-center justify-center w-6 h-6 rounded transition-colors"
-          title="Toggle theme"
+          title={t("topbar.toggleTheme")}
           style={{ color: textDim }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = textSecondary;

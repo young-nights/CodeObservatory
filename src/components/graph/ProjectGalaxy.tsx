@@ -10,6 +10,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { useScanGraph } from "@/hooks/useObservatory";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 import { SettingsPanel } from "./SettingsPanel";
 import type { FileNode, FileEdge } from "@/lib/types";
 import { FolderOpen, File, Hash, Clock, Maximize2 } from "lucide-react";
@@ -98,6 +99,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   const fgRef = useRef<ForceGraphMethods>();
   const { graph, loading, refresh } = useScanGraph(projectPath);
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const isDark = theme === "dark";
   const clr = isDark ? C.dark : C.light;
 
@@ -185,13 +187,13 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           onNodeClick={(n:any)=>setSelected(n as FGNode)} onBackgroundClick={()=>setSelected(null)} enableNodeDrag />
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4" style={{ color: clr.ui.muted, fontSize: 13 }}>
-          {loading ? <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: isDark?"rgba(100,96,255,0.15)":"rgba(0,0,0,0.1)", borderTopColor: isDark?"#8880ff":"#6366f1" }} /> : "No project data"}
+          {loading ? <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: isDark?"rgba(100,96,255,0.15)":"rgba(0,0,0,0.1)", borderTopColor: isDark?"#8880ff":"#6366f1" }} /> : t("app.noData")}
         </div>
       )}
       {/* Title */}
       <div className="absolute top-6 left-8 pointer-events-none select-none">
-        <h1 className="text-2xl font-extrabold tracking-[0.12em]" style={{ color: clr.ui.text, textShadow: isDark?"0 0 40px rgba(136,128,255,0.4)":"none" }}>PROJECT GALAXY</h1>
-        <p style={{ color: clr.ui.dim, fontSize:12, marginTop:4 }}>{cnt>0?`${dc} planets · ${cnt-dc} stars · ${data.links.length} orbits`:"Awaiting…"}</p>
+        <h1 className="text-2xl font-extrabold tracking-[0.12em]" style={{ color: clr.ui.text, textShadow: isDark?"0 0 40px rgba(136,128,255,0.4)":"none" }}>{t("app.title")}</h1>
+        <p style={{ color: clr.ui.dim, fontSize:12, marginTop:4 }}>{cnt>0?`${dc} planets · ${cnt-dc} stars · ${data.links.length} orbits`:t("app.awaiting")}</p>
       </div>
       {/* Buttons */}
       <button onClick={()=>setPanelOpen(v=>!v)} className="absolute top-6 right-6 z-30 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: clr.ui.card, border: `1px solid ${clr.ui.border}`, color: clr.ui.dim }}>
