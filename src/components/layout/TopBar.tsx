@@ -1,7 +1,7 @@
-// TopBar — Sci-fi minimal top bar
-// 44px, clean, watcher status indicator
+// TopBar — Theme-aware, always visible, all inline styles
+// Language toggle + Theme toggle + project path breadcrumb + watcher status
 
-import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon, Globe } from "lucide-react";
+import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
 
@@ -12,125 +12,113 @@ interface TopBarProps {
   onExpand: () => void;
 }
 
-export function TopBar({
-  projectName,
-  watcherRunning,
-  collapsed,
-  onExpand,
-}: TopBarProps) {
+export function TopBar({ projectName, watcherRunning, collapsed, onExpand }: TopBarProps) {
   const { theme, toggle } = useTheme();
   const { t, i18n } = useTranslation();
   const isDark = theme === "dark";
 
-  const bg = isDark ? "#0c0c10" : "#fafafa";
-  const border = isDark ? "1px solid #1c1c24" : "1px solid rgba(0,0,0,0.08)";
-  const textDim = isDark ? "#52525b" : "#a1a1aa";
-  const textMuted = isDark ? "#71717a" : "#52525b";
-  const textSecondary = isDark ? "#a1a1aa" : "#3f3f46";
-  const textPrimary = isDark ? "#fafafa" : "#18181b";
-  const textPlaceholder = isDark ? "#52525b" : "#a1a1aa";
-  const hoverBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)";
-  const chevronColor = isDark ? "#3f3f46" : "#d4d4d8";
-  const idleDot = isDark ? "#3f3f46" : "#d4d4d8";
-
   return (
     <div
-      className="flex items-center h-11 px-4 shrink-0 justify-between"
-      style={{ background: bg, borderBottom: border }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: 44,
+        padding: "0 16px",
+        flexShrink: 0,
+        background: isDark
+          ? "rgba(12, 12, 16, 0.92)"
+          : "rgba(255, 255, 255, 0.92)",
+        backdropFilter: "blur(16px)",
+        borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`,
+      }}
     >
-      {/* Left section */}
-      <div className="flex items-center gap-2 min-w-0">
+      {/* Left: expand button + breadcrumb */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         {collapsed && (
           <button
             onClick={onExpand}
-            className="flex items-center justify-center w-6 h-6 rounded transition-colors"
-            style={{ color: textDim }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = textSecondary;
-              e.currentTarget.style.background = hoverBg;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = textDim;
-              e.currentTarget.style.background = "transparent";
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 24, height: 24, borderRadius: 4,
+              color: isDark ? "#a1a1aa" : "#71717a",
+              background: "transparent", border: "none", cursor: "pointer",
             }}
           >
             <PanelLeft size={15} />
           </button>
         )}
 
-        {/* Breadcrumb */}
         {projectName ? (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <FolderOpen size={13} style={{ color: textDim, flexShrink: 0 }} />
-            <ChevronRight size={10} style={{ color: chevronColor, flexShrink: 0 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <FolderOpen size={13} color={isDark ? "#a1a1aa" : "#71717a"} />
+            <ChevronRight size={10} color={isDark ? "#52525b" : "#d4d4d8"} />
             <span
-              className="text-sm font-medium truncate"
-              style={{ color: textPrimary, fontFamily: "system-ui, sans-serif" }}
+              style={{
+                fontSize: 13, fontWeight: 500, maxWidth: 300,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                color: isDark ? "#fafafa" : "#18181b",
+                fontFamily: "system-ui, sans-serif",
+              }}
             >
               {projectName}
             </span>
           </div>
         ) : (
-          <span className="text-sm" style={{ color: textPlaceholder, fontFamily: "system-ui, sans-serif" }}>
+          <span style={{ fontSize: 13, color: isDark ? "#71717a" : "#a1a1aa", fontFamily: "system-ui, sans-serif" }}>
             CodeObservatory
           </span>
         )}
       </div>
 
-      {/* Right section — Theme toggle + Lang toggle + Watcher status */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Right: language toggle + theme toggle + watcher */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
         {/* Language toggle */}
         <button
           onClick={() => i18n.changeLanguage(i18n.language === "en" ? "zh" : "en")}
-          className="flex items-center justify-center w-7 h-6 rounded text-xs font-semibold transition-colors"
-          title={t("topbar.toggleLang")}
-          style={{ color: textDim, fontFamily: "system-ui, sans-serif" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = textSecondary;
-            e.currentTarget.style.background = hoverBg;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = textDim;
-            e.currentTarget.style.background = "transparent";
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 28, height: 24, borderRadius: 4,
+            fontSize: 12, fontWeight: 600,
+            color: isDark ? "#a1a1aa" : "#71717a",
+            background: "transparent", border: "none", cursor: "pointer",
+            fontFamily: "system-ui, sans-serif",
           }}
         >
           {i18n.language === "en" ? "中" : "EN"}
         </button>
+
         {/* Theme toggle */}
         <button
           onClick={toggle}
-          className="flex items-center justify-center w-6 h-6 rounded transition-colors"
-          title={t("topbar.toggleTheme")}
-          style={{ color: textDim }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = textSecondary;
-            e.currentTarget.style.background = hoverBg;
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = textDim;
-            e.currentTarget.style.background = "transparent";
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 24, height: 24, borderRadius: 4,
+            color: isDark ? "#a1a1aa" : "#71717a",
+            background: "transparent", border: "none", cursor: "pointer",
           }}
         >
           {isDark ? <Sun size={14} /> : <Moon size={14} />}
         </button>
 
         {/* Watcher status */}
-        <span
-          className="inline-block w-1.5 h-1.5 rounded-full"
-          style={{
-            background: watcherRunning ? "#06b6d4" : idleDot,
-            boxShadow: watcherRunning ? "0 0 6px rgba(6,182,212,0.5)" : "none",
-          }}
-        />
-        <span
-          className="text-xs"
-          style={{
-            color: watcherRunning ? textMuted : idleDot,
-            fontFamily: "system-ui, sans-serif",
-          }}
-        >
-          {watcherRunning ? "Watching" : "Idle"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <span
+            style={{
+              display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+              background: watcherRunning ? "#06b6d4" : "#71717a",
+              boxShadow: watcherRunning ? "0 0 6px rgba(6,182,212,0.5)" : "none",
+            }}
+          />
+          <span
+            style={{
+              fontSize: 11, fontFamily: "system-ui, sans-serif",
+              color: watcherRunning ? "#a1a1aa" : "#71717a",
+            }}
+          >
+            {watcherRunning ? t("topbar.watching") : t("topbar.idle")}
+          </span>
+        </div>
       </div>
     </div>
   );
