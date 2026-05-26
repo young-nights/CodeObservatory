@@ -28,10 +28,10 @@ const SEED_D1_COLOR = "#ffd700";
 const SEED_D2_COLOR = "#ff8c42";
 const DUST_COLOR = "#a09060";
 
-// Edge line widths
-const EDGE_SEED_LINE_WIDTH = 0.5;
-const EDGE_STAR_LINE_WIDTH = 0.3;
-const EDGE_DUST_LINE_WIDTH = 0.1;
+// Edge line widths (+50% denser)
+const EDGE_SEED_LINE_WIDTH = 0.75;
+const EDGE_STAR_LINE_WIDTH = 0.45;
+const EDGE_DUST_LINE_WIDTH = 0.15;
 
 // Extension colors for file stars
 const EXT_COLORS: Record<string, string> = {
@@ -80,6 +80,8 @@ export interface CosmicGalaxyProps {
   onFlyComplete?: () => void;
   /** Top directories for tag panel */
   onTopDirsChange?: (dirs: { id: string; label: string; count: number; position: [number, number, number] }[]) => void;
+  /** Sidebar collapsed state — forces canvas resize */
+  collapsed?: boolean;
 }
 
 export interface LayoutNode {
@@ -210,14 +212,14 @@ function computeSeedLayout(
     positions.set(rootId, [0, 0, 0]);
   }
 
-  // Place depth-1 dirs in a ring on z=0 plane, radius 18
+  // Place depth-1 dirs in a ring on z=0 plane, radius 8 (tighter)
   const d1Dirs = nodes.filter((n) => depths.get(n.id) === 1 && n.kind === "dir");
   d1Dirs.forEach((d, i) => {
     const a = (2 * Math.PI * i) / d1Dirs.length;
-    positions.set(d.id, [18 * Math.cos(a), 0, 18 * Math.sin(a)]);
+    positions.set(d.id, [8 * Math.cos(a), 0, 8 * Math.sin(a)]);
   });
 
-  // Place depth-2 dirs in z=±6 rings, radius 32
+  // Place depth-2 dirs in z=±3 rings, radius 16 (tighter)
   const d2Dirs = nodes.filter((n) => depths.get(n.id) === 2 && n.kind === "dir");
   d2Dirs.forEach((d, i) => {
     const parentEdge = edges.find((e) => e.target === d.id);
@@ -226,18 +228,18 @@ function computeSeedLayout(
       ? Math.atan2(parentPos[2], parentPos[0])
       : (2 * Math.PI * i) / d2Dirs.length;
     const half = Math.ceil(d2Dirs.length / 2);
-    const z = i < half ? 6 : -6;
+    const z = i < half ? 3 : -3;
     const ci = i < half ? i : i - half;
     const per = Math.max(1, i < half ? half : d2Dirs.length - half);
     const a = baseA + (2 * Math.PI * ci) / per;
-    positions.set(d.id, [32 * Math.cos(a), z, 32 * Math.sin(a)]);
+    positions.set(d.id, [16 * Math.cos(a), z, 16 * Math.sin(a)]);
   });
 
-  // Place depth-3+ dirs in outer spiral
+  // Place depth-3+ dirs in outer spiral (tighter)
   const deepDirs = nodes.filter((n) => n.kind === "dir" && (depths.get(n.id) ?? 0) >= 3);
   deepDirs.forEach((d, i) => {
     const dd = depths.get(d.id) ?? 3;
-    const r = 38 + (dd - 3) * 4;
+    const r = 20 + (dd - 3) * 3;
     const a = (2 * Math.PI * i) / Math.max(deepDirs.length, 1);
     const h = (dd - 3) * 3 + Math.sin(i * 0.7) * 5;
     positions.set(d.id, [r * Math.cos(a), h, r * Math.sin(a)]);
@@ -261,17 +263,17 @@ function computeSeedLayout(
   for (const [parentId, children] of filesByParent) {
     const center = positions.get(parentId) || [0, 0, 0];
     const count = children.length;
-    const radius = 3.5 + Math.sqrt(count) * 0.7;
+    const radius = Math.min(2.5 + Math.sqrt(count) * 0.5, 12);
     if (count === 1) {
-      positions.set(children[0].id, [center[0] + 4.5, center[1] + 1, center[2] + 1]);
+      positions.set(children[0].id, [center[0] + 2.5, center[1] + 1, center[2] + 1]);
       continue;
     }
     children.forEach((child, i) => {
       const y = 1 - (i / (count - 1)) * 2; // -1 … 1
       const rY = Math.sqrt(Math.max(0, 1 - y * y));
       const theta = phi * i;
-      // Z offset for 3D depth (±5)
-      const zOffset = (Math.sin(theta * 3) * 0.5 + Math.cos(i * 0.7) * 0.5) * 5;
+      // Z offset for 3D depth (±2, tighter)
+      const zOffset = (Math.sin(theta * 3) * 0.5 + Math.cos(i * 0.7) * 0.5) * 2;
       positions.set(child.id, [
         center[0] + radius * rY * Math.cos(theta),
         center[1] + radius * y,
@@ -280,11 +282,11 @@ function computeSeedLayout(
     });
   }
 
-  // Stray nodes — scatter in outer belt
+  // Stray nodes — scatter in outer belt (tighter)
   for (const n of nodes) {
     if (positions.has(n.id)) continue;
     const d = depths.get(n.id) ?? 3;
-    const r = 42 + d * 3;
+    const r = 24 + d * 3;
     const a = Math.random() * 2 * Math.PI;
     const h = (d - 3) * 5 + Math.random() * 4 - 2;
     positions.set(n.id, [r * Math.cos(a), h, r * Math.sin(a)]);
@@ -509,16 +511,16 @@ function StarNode({
     onHover?.(false);
   }, [onHover]);
 
-  // Emissive intensity by hierarchy
+  // Emissive intensity by hierarchy (+50% brighter)
   const baseEmissiveIntensity = isDust
     ? 0
     : kind !== "file"
       ? depth === 0
-        ? 1.5 // root — strongest glow
+        ? 2.25 // root — strongest glow
         : depth === 1
-          ? 1.0 // depth-1 — strong
-          : 0.6 // depth-2 — medium
-      : 0.25; // file — weak
+          ? 1.5 // depth-1 — strong
+          : 0.9 // depth-2 — medium
+      : 0.375; // file — enhanced
 
   useFrame(() => {
     if (!meshRef.current) return;
@@ -701,7 +703,7 @@ function EdgeLines({ edges, edgeOpacity }: { edges: LayoutEdge[]; edgeOpacity: n
 
   return (
     <group>
-      {/* Seed → Seed: gold, thick */}
+      {/* Seed → Seed: gold, thick (brighter) */}
       {ssEdges.map((edge, i) => (
         <Line
           key={`ss-${i}`}
@@ -709,21 +711,21 @@ function EdgeLines({ edges, edgeOpacity }: { edges: LayoutEdge[]; edgeOpacity: n
           color={"#ffb841"}
           lineWidth={EDGE_SEED_LINE_WIDTH}
           transparent
-          opacity={edgeOpacity * 0.25}
+          opacity={edgeOpacity * 0.35}
         />
       ))}
-      {/* Seed → Star: blue, medium */}
+      {/* Seed → Star: brighter blue, denser */}
       {sstEdges.map((edge, i) => (
         <Line
           key={`sst-${i}`}
           points={[edge.source, edge.target]}
-          color={"#4070c0"}
+          color={"#64b4ff"}
           lineWidth={EDGE_STAR_LINE_WIDTH}
           transparent
-          opacity={edgeOpacity * 0.12}
+          opacity={edgeOpacity * 0.25}
         />
       ))}
-      {/* Star → Dust: light gold, thin */}
+      {/* Star → Dust: light gold, thin (brighter) */}
       {sdEdges.map((edge, i) => (
         <Line
           key={`sd-${i}`}
@@ -731,7 +733,7 @@ function EdgeLines({ edges, edgeOpacity }: { edges: LayoutEdge[]; edgeOpacity: n
           color={"#a09060"}
           lineWidth={EDGE_DUST_LINE_WIDTH}
           transparent
-          opacity={edgeOpacity * 0.06}
+          opacity={edgeOpacity * 0.09}
         />
       ))}
     </group>
@@ -817,8 +819,8 @@ function GalaxyScene({
     onFilterCountChange?.(filteredMainNodes.length, filteredEdges.length);
   }, [filteredMainNodes.length, filteredEdges.length, onFilterCountChange]);
 
-  // ── Background star count scaling ──
-  const bgStars = totalNodes > 3000 ? 1000 : totalNodes > 1000 ? 2000 : 5000;
+  // ── Background star count scaling (denser) ──
+  const bgStars = totalNodes > 3000 ? 2000 : totalNodes > 1000 ? 4000 : 6000;
 
   return (
     <GrowthTimeContext.Provider value={growthTimeRef}>
@@ -830,6 +832,12 @@ function GalaxyScene({
       <ambientLight intensity={0.15} />
       <pointLight position={[30, 30, 30]} intensity={3} color="#a5b4fc" />
       <pointLight position={[-20, -10, -20]} intensity={1} color="#4070c0" />
+
+      {/* Root glow sphere — central halo */}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[4, 32, 32]} />
+        <meshBasicMaterial color="#4a6cf7" transparent opacity={0.06} />
+      </mesh>
 
       <OrbitControls
         enableDamping
@@ -885,9 +893,9 @@ function GalaxyScene({
         );
       })()}
 
-      {/* ── Post processing ── */}
+      {/* ── Post processing (enhanced bloom) ── */}
       <EffectComposer>
-        <Bloom luminanceThreshold={0.15} intensity={0.8} radius={0.5} />
+        <Bloom luminanceThreshold={0.1} intensity={1.8} radius={0.6} />
       </EffectComposer>
     </GrowthTimeContext.Provider>
   );
@@ -952,6 +960,7 @@ export function CosmicGalaxy({
   flyTarget,
   onFlyComplete,
   onTopDirsChange,
+  collapsed = false,
 }: CosmicGalaxyProps) {
   const [hoveredNode, setHoveredNode] = useState<LayoutNode | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -988,6 +997,7 @@ export function CosmicGalaxy({
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <Canvas
+        key={`canvas-${collapsed}`}
         camera={{ position: CAMERA_DEFAULTS.position, fov: 60 }}
         gl={{ antialias: true, alpha: false }}
         dpr={[1, 1.5]}

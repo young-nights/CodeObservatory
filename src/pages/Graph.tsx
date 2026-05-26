@@ -1,10 +1,11 @@
 // Graph — Cosmic Seed Universe · 3D visualization
 // Full-screen when sidebar collapsed, bottom info bar, tag panel, search
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useContext } from "react";
 import { RefreshCw, Maximize2, Search, X } from "lucide-react";
 import { useScanGraph } from "@/hooks/useObservatory";
 import { CosmicGalaxy, type CosmicGalaxyPanelSettings } from "@/components/graph/CosmicGalaxy";
+import { SidebarContext } from "@/components/layout/AppLayout";
 
 interface GraphPageProps {
   projectPath: string;
@@ -18,6 +19,7 @@ interface TopDir {
 }
 
 export function GraphPage({ projectPath }: GraphPageProps) {
+  const { collapsed } = useContext(SidebarContext);
   const { graph: graphData, loading, refresh } = useScanGraph(projectPath);
 
   // ── Graph settings ──
@@ -264,6 +266,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
               flyTarget={flyTarget}
               onFlyComplete={() => setFlyTarget(null)}
               onTopDirsChange={setTopDirs}
+              collapsed={collapsed}
             />
           </>
         ) : null}
