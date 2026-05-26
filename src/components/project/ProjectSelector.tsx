@@ -1,5 +1,5 @@
-// Project selector — Linear-inspired co-theme
-// Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
+// ProjectSelector — Precision Instrument
+// No glassmorphism · color hierarchy · outline buttons · underline hover
 
 import { useState } from "react";
 import {
@@ -48,7 +48,6 @@ export function ProjectSelector({
   onSelectRecent,
 }: ProjectSelectorProps) {
   const [activeNav, setActiveNav] = useState<NavItem>("projects");
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { theme, setTheme } = useTheme();
 
   return (
@@ -56,17 +55,18 @@ export function ProjectSelector({
       className="flex h-screen overflow-hidden"
       style={{ background: "var(--co-bg)" }}
     >
-      {/* ════════════════════════════════════════════
-          Left Sidebar — 190px
-          ════════════════════════════════════════════ */}
-      <aside className="co-sidebar co-animate-fade-in-left relative w-[190px] shrink-0 flex flex-col">
-        {/* Branding */}
+      {/* ── Sidebar: 200px ── */}
+      <aside className="co-sidebar co-animate-fade-in-left shrink-0 flex flex-col">
+        {/* Brand — serif */}
         <div className="co-sidebar-brand">
           <div className="co-sidebar-brand-icon">
-            <Telescope size={15} strokeWidth={2} color="white" />
+            <Telescope size={15} strokeWidth={2} />
           </div>
           <span className="co-sidebar-brand-text">CodeObservatory</span>
         </div>
+
+        {/* Separator */}
+        <div className="co-sidebar-separator" />
 
         {/* Navigation */}
         <nav className="co-sidebar-nav">
@@ -81,7 +81,6 @@ export function ProjectSelector({
             <FolderOpen size={14} className="shrink-0" />
             Projects
           </button>
-
           <button
             onClick={() => setActiveNav("settings")}
             className={cn(
@@ -101,9 +100,7 @@ export function ProjectSelector({
         </div>
       </aside>
 
-      {/* ════════════════════════════════════════════
-          Right Content Area
-          ════════════════════════════════════════════ */}
+      {/* ── Main Content ── */}
       <main className="co-animate-fade-in flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
         <div className="co-section-header">
@@ -132,53 +129,73 @@ export function ProjectSelector({
           )}
         </div>
 
-        <hr className="co-separator mx-7" />
+        <hr className="co-separator" style={{ margin: "0 var(--co-space-6)" }} />
 
-        {/* Content */}
+        {/* Content area */}
         <div
-          className="flex-1 overflow-y-auto px-7 py-5"
+          className="flex-1 overflow-y-auto"
           style={{
-            scrollbarColor: "var(--co-border-light) transparent",
+            padding: "var(--co-space-5) var(--co-space-6)",
+            scrollbarColor: "var(--co-border) transparent",
           }}
         >
           {activeNav === "projects" && (
             <div className="co-animate-fade-in">
               {recentProjects.length > 0 ? (
-                <div className="max-w-3xl">
-                  {/* Section header */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="co-badge co-badge-secondary h-5 w-5 flex items-center justify-center p-0 text-[10px] font-bold">
+                <div style={{ maxWidth: 640 }}>
+                  {/* Section label — 10px uppercase */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--co-space-2)",
+                      marginBottom: "var(--co-space-3)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        minWidth: 20,
+                        height: 20,
+                        borderRadius: 4,
+                        fontSize: "var(--co-font-size-2xs)",
+                        fontWeight: "var(--co-font-weight-semibold)",
+                        background: "var(--co-accent-subtle)",
+                        color: "var(--co-accent-text)",
+                      }}
+                    >
                       {recentProjects.length}
                     </span>
                     <span
-                      className="text-[10px] font-semibold uppercase tracking-wider"
-                      style={{ color: "var(--co-text-muted)" }}
+                      style={{
+                        fontSize: "var(--co-font-size-2xs)",
+                        fontWeight: "var(--co-font-weight-semibold)",
+                        textTransform: "uppercase",
+                        letterSpacing: "var(--co-letter-spacing-label)",
+                        color: "var(--co-text-muted)",
+                      }}
                     >
                       Recent Projects
                     </span>
                   </div>
 
-                  {/* Project list */}
-                  <div className="co-stagger space-y-1">
-                    {recentProjects.map((proj, i) => (
+                  {/* Project list — hover translateX(2px) */}
+                  <div
+                    className="co-stagger"
+                    style={{ display: "flex", flexDirection: "column", gap: "var(--co-space-2)" }}
+                  >
+                    {recentProjects.map((proj) => (
                       <button
                         key={proj.path}
                         onClick={() => onSelectRecent(proj.path)}
-                        onMouseEnter={() => setHoveredIndex(i)}
-                        onMouseLeave={() => setHoveredIndex(null)}
-                        className={cn(
-                          "co-project-card",
-                          hoveredIndex === i && "co-project-card-active"
-                        )}
+                        className="co-project-card"
                       >
                         <div className="co-project-icon">
                           <FolderOpen
                             size={18}
-                            color={
-                              hoveredIndex === i
-                                ? "var(--co-accent)"
-                                : "var(--co-text-muted)"
-                            }
+                            style={{ color: "var(--co-text-muted)" }}
                           />
                         </div>
 
@@ -205,12 +222,15 @@ export function ProjectSelector({
                 </div>
               ) : (
                 /* Empty state */
-                <div className="co-animate-fade-in co-empty-state">
+                <div
+                  className="co-animate-fade-in co-empty-state"
+                  style={{ height: "auto", paddingTop: "var(--co-space-10)" }}
+                >
                   <div className="co-empty-icon">
                     <FolderSearch
-                      size={32}
-                      color="var(--co-text-muted)"
+                      size={28}
                       strokeWidth={1.5}
+                      style={{ color: "var(--co-text-muted)" }}
                     />
                   </div>
                   <p className="co-empty-text">
@@ -222,54 +242,70 @@ export function ProjectSelector({
           )}
 
           {activeNav === "settings" && (
-            <div className="co-animate-fade-in py-5 max-w-lg">
-              <div className="co-card">
+            <div className="co-animate-fade-in" style={{ maxWidth: 420 }}>
+              <div className="co-card" style={{ marginTop: "var(--co-space-2)" }}>
                 <div className="co-card-header">
                   <h3 className="co-card-title">Appearance</h3>
-                  <p className="co-card-desc">
-                    Choose your preferred theme
-                  </p>
+                  <p className="co-card-desc">Choose your preferred theme</p>
                 </div>
                 <div className="co-card-content">
                   <div
-                    className="inline-flex rounded-md border p-0.5"
                     style={{
-                      borderColor: "var(--co-border)",
+                      display: "inline-flex",
+                      borderRadius: "var(--co-radius-sm)",
+                      border: "1px solid var(--co-border)",
+                      padding: 3,
                       background: "var(--co-bg-sidebar)",
                     }}
                   >
                     <button
                       onClick={() => setTheme("dark")}
-                      className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all",
-                        theme === "dark"
-                          ? "text-white"
-                          : "text-[var(--co-text-muted)] hover:text-[var(--co-text)]"
-                      )}
-                      style={
-                        theme === "dark"
-                          ? { background: "var(--co-accent)" }
-                          : { background: "transparent" }
-                      }
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--co-space-2)",
+                        padding: "6px 14px",
+                        borderRadius: "var(--co-radius-sm)",
+                        fontSize: "var(--co-font-size-sm)",
+                        fontWeight: "var(--co-font-weight-medium)",
+                        border: "none",
+                        cursor: "pointer",
+                        background:
+                          theme === "dark" ? "var(--co-accent)" : "transparent",
+                        color:
+                          theme === "dark"
+                            ? "oklch(100% 0 0)"
+                            : "var(--co-text-muted)",
+                        transition: "background var(--co-duration-fast) var(--co-ease-out)",
+                      }}
                     >
-                      <Moon size={15} />
+                      <Moon size={14} />
                       Dark
                     </button>
                     <button
                       onClick={() => setTheme("light")}
-                      className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all",
-                        theme === "light"
-                          ? "text-white"
-                          : "text-[var(--co-text-muted)] hover:text-[var(--co-text)]"
-                      )}
-                      style={
-                        theme === "light"
-                          ? { background: "var(--co-accent)" }
-                          : { background: "transparent" }
-                      }
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--co-space-2)",
+                        padding: "6px 14px",
+                        borderRadius: "var(--co-radius-sm)",
+                        fontSize: "var(--co-font-size-sm)",
+                        fontWeight: "var(--co-font-weight-medium)",
+                        border: "none",
+                        cursor: "pointer",
+                        background:
+                          theme === "light"
+                            ? "var(--co-accent)"
+                            : "transparent",
+                        color:
+                          theme === "light"
+                            ? "oklch(100% 0 0)"
+                            : "var(--co-text-muted)",
+                        transition: "background var(--co-duration-fast) var(--co-ease-out)",
+                      }}
                     >
-                      <Sun size={15} />
+                      <Sun size={14} />
                       Light
                     </button>
                   </div>

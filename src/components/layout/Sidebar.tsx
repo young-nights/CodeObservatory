@@ -1,27 +1,17 @@
-// Sidebar navigation — Linear-inspired co-theme design system
-// Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
+// Sidebar — 200px precision navigation
+// Design: Precision Instrument · OKLCH · serif brand · 2px accent indicator
 
 import { cn } from "@/lib/utils";
 import {
   Telescope,
   LayoutDashboard,
-  Share2,
-  Settings,
-  User,
   Activity,
+  Share2,
 } from "lucide-react";
-
-export interface NavItem {
-  id: string;
-  label: string;
-  icon: React.ReactNode;
-  disabled?: boolean;
-}
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  projectName?: string;
   collapsed?: boolean;
 }
 
@@ -34,20 +24,20 @@ const navItems = [
 export function Sidebar({
   activeTab,
   onTabChange,
-  projectName,
   collapsed = false,
 }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "co-sidebar flex flex-col h-screen relative transition-all duration-300",
-        collapsed ? "w-[60px]" : "w-[210px]"
+        "co-sidebar flex flex-col h-screen relative shrink-0 transition-all",
+        collapsed ? "w-[56px]" : "w-[200px]"
       )}
+      style={{ transitionDuration: "var(--co-duration-normal)" }}
     >
-      {/* App branding */}
+      {/* Brand — serif 18px Georgia -0.01em */}
       <div className="co-sidebar-brand shrink-0">
         <div className="co-sidebar-brand-icon">
-          <Telescope size={16} strokeWidth={2} color="white" />
+          <Telescope size={16} strokeWidth={2} />
         </div>
         {!collapsed && (
           <span className="co-sidebar-brand-text co-animate-fade-in">
@@ -56,7 +46,10 @@ export function Sidebar({
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Separator */}
+      <div className="co-sidebar-separator" />
+
+      {/* Navigation — 13px, padding 8px 14px, 2px gap */}
       <nav className="co-sidebar-nav">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
@@ -72,54 +65,27 @@ export function Sidebar({
                 title={collapsed ? item.label : undefined}
               >
                 {isActive && <span className="co-nav-indicator" />}
-                <span>{item.icon}</span>
-                {!collapsed && <span>{item.label}</span>}
+                <span className={cn(isActive && "relative z-10")}>{item.icon}</span>
+                {!collapsed && (
+                  <span className={cn(isActive && "relative z-10")}>
+                    {item.label}
+                  </span>
+                )}
               </button>
             </div>
           );
         })}
       </nav>
 
-      {/* Bottom section */}
+      {/* Footer — version 10px, right aligned */}
       <div className="co-sidebar-footer shrink-0">
-        <div className={cn("space-y-2", collapsed && "px-0")}>
-          {/* User area */}
-          {!collapsed && (
-            <div className="flex items-center gap-2.5 px-1">
-              <div className="co-sidebar-avatar">
-                <User size={12} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color: "var(--co-text)" }}>
-                  {projectName || "No Project"}
-                </p>
-                <p className="text-[10px]" style={{ color: "var(--co-text-muted)" }}>
-                  Local
-                </p>
-              </div>
-            </div>
+        <div
+          className={cn(
+            "co-sidebar-version",
+            collapsed && "text-center"
           )}
-
-          {/* Settings button */}
-          <button
-            className={cn(
-              "w-full co-nav-item",
-              collapsed && "justify-center px-0"
-            )}
-          >
-            <Settings size={14} />
-            {!collapsed && <span>Settings</span>}
-          </button>
-
-          {/* Version */}
-          <div
-            className={cn(
-              "co-sidebar-version",
-              collapsed ? "text-center" : "px-1"
-            )}
-          >
-            v0.1.0
-          </div>
+        >
+          v0.1.0
         </div>
       </div>
     </aside>

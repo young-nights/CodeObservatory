@@ -1,5 +1,6 @@
-// Graph page — Linear-inspired file relationship visualization
-// Dark minimal background with dot nodes and fine connections.
+// Graph — Precision Instrument core visualization
+// OKLCH node colors · 0.3px edges · neighborhood highlight dimming
+// No gradient · no texture · no neon
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import cytoscape, { type Core, type EventObject } from "cytoscape";
@@ -10,33 +11,30 @@ import {
   Maximize2,
   GitBranch,
   Network,
-  Circle,
 } from "lucide-react";
 
-// ---------------------------------------------------------------------------
-// Linear-inspired palette for node types
-// ---------------------------------------------------------------------------
+// ── Node colors in OKLCH ──
 const NODE_COLORS: Record<string, string> = {
-  dir: "#d19a00",
-  ts: "#5e6ad2",
-  tsx: "#5e6ad2",
-  js: "#5e6ad2",
-  jsx: "#5e6ad2",
-  rs: "#e5484d",
-  json: "#d19a00",
-  toml: "#d19a00",
-  yaml: "#d19a00",
-  yml: "#d19a00",
-  md: "#8b5cf6",
-  css: "#46a758",
-  html: "#46a758",
-  scss: "#46a758",
-  c: "#888888",
-  h: "#888888",
-  cpp: "#888888",
-  hpp: "#888888",
-  py: "#6b75db",
-  default: "#5a5a5a",
+  dir: "oklch(70% 0.15 85)",
+  ts: "oklch(65% 0.15 255)",
+  tsx: "oklch(65% 0.15 255)",
+  js: "oklch(65% 0.15 255)",
+  jsx: "oklch(65% 0.15 255)",
+  rs: "oklch(60% 0.18 20)",
+  md: "oklch(60% 0.12 300)",
+  json: "oklch(70% 0.15 85)",
+  toml: "oklch(70% 0.15 85)",
+  yaml: "oklch(70% 0.15 85)",
+  yml: "oklch(70% 0.15 85)",
+  css: "oklch(65% 0.15 255)",
+  html: "oklch(65% 0.15 255)",
+  scss: "oklch(65% 0.15 255)",
+  c: "oklch(50% 0.05 260)",
+  h: "oklch(50% 0.05 260)",
+  cpp: "oklch(50% 0.05 260)",
+  hpp: "oklch(50% 0.05 260)",
+  py: "oklch(65% 0.15 255)",
+  default: "oklch(50% 0.05 260)",
 };
 
 function getNodeColor(node: FileNode): string {
@@ -47,7 +45,7 @@ function getNodeColor(node: FileNode): string {
 }
 
 function getNodeSize(node: FileNode): number {
-  return node.kind === "dir" ? 14 : 10;
+  return node.kind === "dir" ? 12 : 8;
 }
 
 function formatSize(bytes?: number): string {
@@ -57,15 +55,11 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 interface GraphPageProps {
   projectPath: string;
 }
 
 type LayoutName = "cose" | "breadthfirst";
-
 const LABEL_ZOOM_THRESHOLD = 1.5;
 
 export function GraphPage({ projectPath }: GraphPageProps) {
@@ -120,48 +114,42 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         container: containerRef.current,
         elements,
         style: [
-          // --- Nodes ---
+          // ── Nodes: 12px dir / 8px file, opacity 0.7 ──
           {
             selector: "node",
             style: {
               "background-color": "data(color)",
-              "background-opacity": 0.75,
+              "background-opacity": 0.7,
               width: "data(nodeSize)",
               height: "data(nodeSize)",
-              "text-outline-color": "data(color)",
-              "text-outline-width": 2,
-              "text-outline-opacity": 0.35,
               label: "data(label)",
-              "font-size": "8px",
+              "font-size": "7px",
               "text-valign": "bottom",
               "text-halign": "center",
-              "text-margin-y": 5,
+              "text-margin-y": 4,
               color: "data(color)",
               "text-opacity": 0,
-              "font-family":
-                "'Inter', 'Segoe UI', system-ui, sans-serif",
+              "font-family": "'SF Pro Display', 'Segoe UI', system-ui, sans-serif",
               "z-index": 10,
-              "transition-property":
-                "background-opacity, text-opacity, width, height",
-              "transition-duration": 150,
-              "transition-timing-function": "ease-out",
+              "transition-property": "background-opacity, text-opacity, width, height",
+              "transition-duration": 200,
             },
           },
+          // Selected: opacity 1, neighborhood highlight
           {
             selector: "node:selected",
             style: {
               "background-opacity": 1,
-              width: "mapData(nodeSize, 10, 14, 14, 20)",
-              height: "mapData(nodeSize, 10, 14, 14, 20)",
-              "text-outline-opacity": 0.6,
+              width: "mapData(nodeSize, 8, 12, 12, 18)",
+              height: "mapData(nodeSize, 8, 12, 12, 18)",
               "z-index": 9999,
             },
           },
-          // Dim non-neighbours on neighbourhood highlight
+          // Dimmed: opacity 0.04
           {
             selector: "node.dimmed",
             style: {
-              opacity: 0.05,
+              opacity: 0.04,
             },
           },
           {
@@ -169,27 +157,26 @@ export function GraphPage({ projectPath }: GraphPageProps) {
             style: {
               opacity: 1,
               "background-opacity": 0.9,
-              "text-outline-opacity": 0.5,
             },
           },
-          // Labels-on class (applied when zoom > 1.5×)
+          // Labels on (zoom > 1.5×)
           {
             selector: "node.labels-on",
             style: {
-              "text-opacity": 0.75,
+              "text-opacity": 0.7,
             },
           },
-          // --- Edges ---
+          // ── Edges: 0.3px, 5% opacity white ──
           {
             selector: "edge",
             style: {
-              width: 0.4,
-              "line-color": "rgba(255,255,255,0.05)",
+              width: 0.3,
+              "line-color": "oklch(100% 0 0 / 0.05)",
               "curve-style": "bezier",
               "target-arrow-shape": "none",
               "z-index": 0,
               "transition-property": "line-color, width, opacity",
-              "transition-duration": 150,
+              "transition-duration": 200,
             },
           },
           {
@@ -201,8 +188,8 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           {
             selector: "edge.highlighted",
             style: {
-              "line-color": "rgba(255,255,255,0.15)",
-              width: 0.6,
+              "line-color": "oklch(100% 0 0 / 0.15)",
+              width: 0.5,
               opacity: 1,
             },
           },
@@ -211,6 +198,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           name: "cose",
           animate: true,
           animationDuration: 800,
+          animationEasing: "ease-out",
           nodeRepulsion: () => 8000,
           idealEdgeLength: () => 120,
           gravity: 0.15,
@@ -222,7 +210,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         maxZoom: 5,
       });
 
-      // ---- Zoom-based label toggle ----
+      // Zoom-based label toggle
       cy.on("zoom", () => {
         const z = cy.zoom();
         const next = z > LABEL_ZOOM_THRESHOLD;
@@ -235,7 +223,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         });
       });
 
-      // ---- Tooltip on hover ----
+      // Tooltip on hover
       cy.on("mouseover", "node", (evt: EventObject) => {
         const node = evt.target;
         const pos = node.renderedPosition();
@@ -247,8 +235,8 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         const sz = formatSize(d.size as number | undefined);
         setTooltip({
           visible: true,
-          x: pos.x + containerPos.left + 12,
-          y: pos.y + containerPos.top - 60,
+          x: pos.x + containerPos.left + 10,
+          y: pos.y + containerPos.top - 50,
           label: d.label as string,
           path: d.path as string,
           kind: k === "dir" ? "Directory" : "File",
@@ -260,7 +248,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         setTooltip((prev) => ({ ...prev, visible: false }));
       });
 
-      // ---- Click: 1-degree neighbourhood highlight ----
+      // Click: 1-degree neighborhood highlight → rest dim to 0.04
       cy.on("tap", "node", (evt: EventObject) => {
         const target = evt.target;
         const neighbourhood = target
@@ -280,7 +268,6 @@ export function GraphPage({ projectPath }: GraphPageProps) {
 
       cyRef.current = cy;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -294,16 +281,12 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         cyRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph]);
+  }, [graph, initCytoscape]);
 
   const handleLayoutChange = useCallback((name: LayoutName) => {
     setLayoutName(name);
     if (!cyRef.current) return;
-    cyRef.current
-      .elements()
-      .removeClass("dimmed")
-      .removeClass("highlighted");
+    cyRef.current.elements().removeClass("dimmed").removeClass("highlighted");
     cyRef.current
       .layout({
         name,
@@ -311,6 +294,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           ? {
               animate: true,
               animationDuration: 600,
+              animationEasing: "ease-out",
               nodeRepulsion: () => 8000,
               idealEdgeLength: () => 120,
               gravity: 0.15,
@@ -321,6 +305,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
               spacingFactor: 1.2,
               animate: true,
               animationDuration: 400,
+              animationEasing: "ease-out",
             }),
       })
       .run();
@@ -337,64 +322,65 @@ export function GraphPage({ projectPath }: GraphPageProps) {
     graph?.nodes.filter((n) => n.kind === "file").length ?? 0;
 
   return (
-    <div
-      className="flex flex-col h-full"
-      style={{ background: "var(--co-bg)" }}
-    >
-      {/* ── Toolbar: 40px height ── */}
-      <div className="co-obsidian-toolbar flex items-center justify-between px-4">
-        {/* Left: title + badges */}
-        <div className="flex items-center gap-3">
-          <span className="co-obsidian-toolbar-title">Graph</span>
-          <span className="co-obsidian-badge">
-            <Circle size={6} fill={NODE_COLORS.dir} stroke="none" />
+    <div className="flex flex-col h-full co-graph-bg">
+      {/* ── Toolbar: 40px, icon buttons left-aligned ── */}
+      <div className="co-graph-toolbar">
+        {/* Left: badges (dir/file/edge counts) */}
+        <div className="co-graph-toolbar-left">
+          <span className="co-graph-badge">
+            <svg width="6" height="6" viewBox="0 0 6 6">
+              <circle cx="3" cy="3" r="3" fill={NODE_COLORS.dir} />
+            </svg>
             {dirCount}
           </span>
-          <span className="co-obsidian-badge">
-            <Circle size={6} fill={NODE_COLORS.ts} stroke="none" />
+          <span className="co-graph-badge">
+            <svg width="6" height="6" viewBox="0 0 6 6">
+              <circle cx="3" cy="3" r="3" fill={NODE_COLORS.ts} />
+            </svg>
             {fileCount}
           </span>
-          <span className="co-obsidian-badge">{edgeCount} edges</span>
+          <span className="co-graph-badge">{edgeCount} edges</span>
           {labelsVisible && (
             <span
-              className="co-obsidian-badge"
+              className="co-graph-badge"
               style={{ color: "var(--co-text-muted)" }}
             >
-              labels on
+              labels
             </span>
           )}
         </div>
 
-        {/* Right: icon buttons with tooltips */}
-        <div className="flex items-center gap-1">
-          <div className="co-obsidian-layout-toggle">
+        {/* Right: icon-only buttons */}
+        <div className="co-graph-toolbar-right">
+          {/* Layout toggle */}
+          <div className="co-graph-layout-toggle">
             <button
-              className={`co-obsidian-layout-btn ${layoutName === "cose" ? "active" : ""}`}
+              className={`co-graph-layout-btn ${layoutName === "cose" ? "co-graph-layout-btn-active" : ""}`}
               onClick={() => handleLayoutChange("cose")}
-              title="Force-directed layout"
+              title="Force-directed"
             >
               <Network size={12} />
             </button>
             <button
-              className={`co-obsidian-layout-btn ${layoutName === "breadthfirst" ? "active" : ""}`}
+              className={`co-graph-layout-btn ${layoutName === "breadthfirst" ? "co-graph-layout-btn-active" : ""}`}
               onClick={() => handleLayoutChange("breadthfirst")}
-              title="Hierarchy layout"
+              title="Hierarchy"
             >
               <GitBranch size={12} />
             </button>
           </div>
           <button
-            className="co-obsidian-icon-btn"
+            className="co-graph-icon-btn"
             onClick={handleFit}
-            title="Fit to screen"
+            title="Fit"
           >
             <Maximize2 size={13} />
           </button>
           <button
-            className="co-obsidian-icon-btn"
+            className="co-graph-icon-btn"
             onClick={refresh}
             disabled={loading}
-            title="Re-scan project directory"
+            title="Rescan"
           >
             <RefreshCw
               size={13}
@@ -404,52 +390,43 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         </div>
       </div>
 
-      {/* ── Graph Canvas ── */}
-      <div className="co-obsidian-canvas-wrapper">
+      {/* ── Canvas ── */}
+      <div className="co-graph-canvas-wrapper">
         {loading && !graph ? (
-          <div className="co-obsidian-loading">
-            <div className="co-obsidian-loading-spinner" />
-            <p className="co-obsidian-loading-text">
-              Scanning files…
-            </p>
+          <div className="co-graph-loading">
+            <div className="co-graph-loading-spinner" />
+            <p className="co-graph-loading-text">Scanning files...</p>
           </div>
         ) : graph && graph.nodes.length === 0 ? (
-          <div className="co-obsidian-empty">
-            <p className="co-obsidian-empty-title">Empty</p>
-            <p className="co-obsidian-empty-desc">
+          <div className="co-graph-empty">
+            <p className="co-graph-empty-title">Empty</p>
+            <p className="co-graph-empty-desc">
               This directory contains no files or folders.
             </p>
           </div>
         ) : !projectPath ? (
-          <div className="co-obsidian-empty">
-            <p className="co-obsidian-empty-title">No Project</p>
-            <p className="co-obsidian-empty-desc">
+          <div className="co-graph-empty">
+            <p className="co-graph-empty-title">No Project</p>
+            <p className="co-graph-empty-desc">
               Open a project to visualize its file graph.
             </p>
           </div>
         ) : (
-          <div
-            ref={containerRef}
-            className="co-obsidian-cy-container"
-          />
+          <div ref={containerRef} className="co-graph-cy-container" />
         )}
 
-        {/* ── Tooltip: compact, rounded, translucent black ── */}
+        {/* Tooltip — solid color, no glass */}
         {tooltip.visible && (
           <div
-            className="co-obsidian-tooltip"
+            className="co-graph-tooltip"
             style={{ left: tooltip.x, top: tooltip.y }}
           >
-            <div className="co-obsidian-tooltip-label">
-              {tooltip.label}
-            </div>
-            <div className="co-obsidian-tooltip-meta">
+            <div className="co-graph-tooltip-label">{tooltip.label}</div>
+            <div className="co-graph-tooltip-meta">
               <span>{tooltip.kind}</span>
               {tooltip.size && <span>· {tooltip.size}</span>}
             </div>
-            <div className="co-obsidian-tooltip-path">
-              {tooltip.path}
-            </div>
+            <div className="co-graph-tooltip-path">{tooltip.path}</div>
           </div>
         )}
       </div>

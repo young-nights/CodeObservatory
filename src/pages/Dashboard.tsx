@@ -1,8 +1,6 @@
-// Dashboard page — Linear-inspired co-theme
-// Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
+// Dashboard — Precision Instrument
+// serif stat numbers 32px · labels 10px uppercase · 3-column grid
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChanges, useWatcher } from "@/hooks/useObservatory";
 import type { ChangeRecord } from "@/lib/types";
 import { getFileName, relativeTime, cn } from "@/lib/utils";
@@ -10,9 +8,6 @@ import {
   FileText,
   GitCommit,
   Clock,
-  AlertCircle,
-  Activity,
-  TrendingUp,
 } from "lucide-react";
 
 interface DashboardPageProps {
@@ -26,162 +21,163 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
   const stats = computeStats(changes);
 
   return (
-    <div className="p-5 space-y-5 max-w-5xl mx-auto">
-      {/* Page title */}
+    <div style={{ padding: "var(--co-space-5)", maxWidth: 960, margin: "0 auto" }}>
+      {/* Section header */}
       <div
         className="co-section-header co-animate-fade-in"
-        style={{ padding: "0" }}
+        style={{ padding: "0 0 var(--co-space-4) 0" }}
       >
-        <div className="flex items-center gap-3">
-          <Activity size={18} color="var(--co-accent)" />
-          <h2
-            className="co-section-title"
-            style={{ fontSize: "var(--co-font-size-xl)" }}
-          >
-            Dashboard
-          </h2>
+        <h2 className="co-section-title">Dashboard</h2>
+      </div>
+
+      {/* Stats — 3-column grid, serif numbers */}
+      {stats.total > 0 || loading ? (
+        <div className="co-stat-grid co-stagger">
+          <StatCard
+            icon={<GitCommit size={16} />}
+            label="Total Changes"
+            value={stats.total}
+            variant="default"
+          />
+          <StatCard
+            icon={<FileText size={16} />}
+            label="Files Tracked"
+            value={stats.uniqueFiles}
+            variant="success"
+          />
+          <StatCard
+            icon={<Clock size={16} />}
+            label="Watcher"
+            value={status?.running ? "Active" : "Idle"}
+            variant={status?.running ? "success" : "default"}
+            valueStyle={{
+              fontSize: "14px",
+              fontFamily: "var(--co-font-sans)",
+              color: status?.running ? "var(--co-success)" : "var(--co-text-muted)",
+            }}
+          />
         </div>
-      </div>
+      ) : null}
 
-      {/* Stats cards — 3-column grid */}
-      <div className="co-stat-grid co-stagger">
-        {stats.total > 0 || loading ? (
-          <>
-            <StatCard
-              icon={<GitCommit size={18} />}
-              label="Total Changes"
-              value={stats.total}
-              color="blue"
-            />
-            <StatCard
-              icon={<FileText size={18} />}
-              label="Files Tracked"
-              value={stats.uniqueFiles}
-              color="green"
-            />
-            <StatCard
-              icon={<Clock size={18} />}
-              label="Watcher"
-              value={status?.running ? "Active" : "Idle"}
-              color={status?.running ? "green" : "purple"}
-              valueStyle={
-                status?.running
-                  ? { color: "var(--co-success)", fontSize: "14px" }
-                  : { color: "var(--co-text-muted)", fontSize: "14px" }
-              }
-              trend={status?.running ? "up" : "down"}
-            />
-            <StatCard
-              icon={<AlertCircle size={18} />}
-              label="Detected"
-              value={String(status?.changesDetected ?? 0)}
-              color="amber"
-            />
-          </>
-        ) : null}
-      </div>
-
-      {/* Recent changes */}
-      <div className="co-animate-fade-in">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2" style={{ fontSize: "var(--co-font-size-lg)" }}>
-              <TrendingUp size={14} color="var(--co-text-muted)" />
+      {/* Recent changes — compact, hover translateX(2px) */}
+      <div className="co-animate-fade-in" style={{ marginTop: "var(--co-space-4)" }}>
+        <div
+          className="co-card"
+          style={{ border: "none", background: "transparent" }}
+        >
+          {/* Header */}
+          <div
+            className="co-card-header"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingBottom: "var(--co-space-2)",
+            }}
+          >
+            <h3
+              style={{
+                fontFamily: "var(--co-font-serif)",
+                fontSize: "var(--co-font-size-lg)",
+                color: "var(--co-text)",
+              }}
+            >
               Recent Changes
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="max-h-[380px]">
-              {loading && changes.length === 0 ? (
-                <div className="flex items-center justify-center py-10">
-                  <p
-                    style={{ color: "var(--co-text-muted)" }}
-                    className="text-xs animate-pulse"
-                  >
-                    Loading...
-                  </p>
-                </div>
-              ) : recentChanges.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10">
-                  <FileText
-                    size={24}
-                    color="var(--co-text-dim)"
-                    className="mb-2 opacity-30"
-                  />
-                  <p
-                    style={{ color: "var(--co-text-muted)" }}
-                    className="text-xs"
-                  >
-                    No changes recorded yet
-                  </p>
-                  <p
-                    style={{ color: "var(--co-text-dim)" }}
-                    className="text-[10px] mt-1"
-                  >
-                    Start editing files in your project
-                  </p>
-                </div>
-              ) : (
-                <div
-                  className="co-stagger"
-                  style={{ borderColor: "var(--co-border)" }}
+            </h3>
+          </div>
+
+          {/* Content */}
+          <div style={{ padding: 0 }}>
+            {loading && changes.length === 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "var(--co-space-8) 0",
+                }}
+              >
+                <p
+                  style={{ color: "var(--co-text-muted)", fontSize: "var(--co-font-size-xs)" }}
                 >
-                  {recentChanges.map((change) => (
-                    <ChangeRow key={change.id} change={change} />
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+                  Loading...
+                </p>
+              </div>
+            ) : recentChanges.length === 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "var(--co-space-8) 0",
+                }}
+              >
+                <FileText
+                  size={24}
+                  style={{ color: "var(--co-text-dim)", opacity: 0.3, marginBottom: "var(--co-space-2)" }}
+                />
+                <p style={{ color: "var(--co-text-muted)", fontSize: "var(--co-font-size-xs)" }}>
+                  No changes recorded yet
+                </p>
+              </div>
+            ) : (
+              <div
+                className="co-stagger"
+                style={{
+                  borderTop: "1px solid var(--co-border)",
+                }}
+              >
+                {recentChanges.map((change) => (
+                  <ChangeRow key={change.id} change={change} />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
+/* ── Stat Card ── */
 function StatCard({
   icon,
   label,
   value,
-  color,
-  trend,
+  variant,
   valueStyle,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  color: "blue" | "green" | "amber" | "purple";
-  trend?: "up" | "down" | null;
+  variant: "default" | "success" | "warning";
   valueStyle?: React.CSSProperties;
 }) {
-  const iconClass = cn("co-stat-icon", `co-stat-icon-${color}`);
+  const iconClass =
+    variant === "success"
+      ? "co-stat-icon-success"
+      : variant === "warning"
+        ? "co-stat-icon-warning"
+        : "co-stat-icon-default";
 
   return (
     <div className="co-stat-card">
-      <div className={iconClass}>{icon}</div>
+      <div className={cn("co-stat-icon", iconClass)}>{icon}</div>
       <div className="min-w-0">
         <p className="co-stat-value" style={valueStyle}>
           {value}
         </p>
         <p className="co-stat-label">{label}</p>
       </div>
-      {trend && (
-        <div className="ml-auto">
-          <span
-            className={cn(
-              "h-2 w-2 rounded-full inline-block",
-              trend === "up" ? "co-status-dot-online" : "co-status-dot-offline"
-            )}
-          />
-        </div>
-      )}
     </div>
   );
 }
 
+/* ── Change Row — hover translateX(2px) ── */
 function ChangeRow({ change }: { change: ChangeRecord }) {
   const kindRowClass = `co-change-row co-change-row-kind-${change.kind}`;
-  const kindClass: Record<string, string> = {
+  const kindBadgeClass: Record<string, string> = {
     created: "co-badge co-badge-success",
     modified: "co-badge co-badge-default",
     deleted: "co-badge co-badge-danger",
@@ -192,7 +188,7 @@ function ChangeRow({ change }: { change: ChangeRecord }) {
       <span
         className={cn(
           "text-[10px] font-medium shrink-0",
-          kindClass[change.kind] || "co-badge co-badge-secondary"
+          kindBadgeClass[change.kind] || "co-badge co-badge-secondary"
         )}
       >
         {change.kind}
