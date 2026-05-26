@@ -67,7 +67,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
       (r as any).__bloom = true;
       const cmp = new EffectComposer(r); cmp.addPass(new RenderPass(s, c));
       const bp = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-      bp.threshold = 0.04; bp.strength = strength; bp.radius = 0.9; cmp.addPass(bp);
+      bp.threshold = 0.03; bp.strength = strength; bp.radius = 1.0; cmp.addPass(bp);
       const orig = r.render.bind(r); r.render = () => cmp.render();
       (r as any).__bloomCmp = cmp; (r as any).__bloomPass = bp;
       clearInterval(iv);
@@ -78,7 +78,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:1.3, edgeOpacity:0.12, bloomStrength:2.0, chargeStrength:-60, linkDistance:14, linkStrength:0.4, centerGravity:0.2 };
+const DEFS: GalaxySettings = { nodeSize:1.3, edgeOpacity:0.12, bloomStrength:2.5, chargeStrength:-60, linkDistance:14, linkStrength:0.4, centerGravity:0.2 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -142,7 +142,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     const r = n.type === "root" ? 2.0 : n.type === "dir" ? 0.8 : 0.35;
     const s = r * settings.nodeSize; const segs = n.type === "file" ? 8 : 24;
     const geo = new THREE.SphereGeometry(s, segs, segs);
-    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 3.0 : n.type === "dir" ? 1.5 : 0.9, roughness: 0.2, metalness: 0.05 });
+    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 4.0 : n.type === "dir" ? 1.8 : 1.0, roughness: 0.15, metalness: 0.03, toneMapped: false });
     g.add(new THREE.Mesh(geo, mat));
     // Bigger, brighter ring for dirs
     if (n.type !== "file") {
