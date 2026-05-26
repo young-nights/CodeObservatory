@@ -1,10 +1,14 @@
-// Timeline page - chronological list of all changes
+// Timeline page — co-theme design system
+// Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
+// No framer-motion; animated with co-animate-* and co-stagger.
 
 import { useChanges } from "@/hooks/useObservatory";
-import { Card, CardContent, Badge } from "@/components/ui/base";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ChangeRecord } from "@/lib/types";
-import { formatTimestamp, getChangeKindColor, getFileName } from "@/lib/utils";
-import { FileText, User, Hash } from "lucide-react";
+import { formatTimestamp, getFileName, cn } from "@/lib/utils";
+import { FileText, User, Hash, Clock } from "lucide-react";
 
 interface TimelinePageProps {
   projectPath: string;
@@ -15,36 +19,58 @@ export function TimelinePage({ projectPath }: TimelinePageProps) {
 
   if (loading && changes.length === 0) {
     return (
-      <div className="p-6">
-        <h2 className="text-lg font-semibold mb-4">Timeline</h2>
-        <p className="text-sm text-muted-foreground">Loading changes...</p>
+      <div className="p-6 max-w-5xl mx-auto">
+        <h2 className="co-section-title co-animate-fade-in" style={{ fontSize: "20px", marginBottom: "24px" }}>
+          Timeline
+        </h2>
+        <div className="flex items-center justify-center py-12">
+          <p style={{ color: "var(--co-text-muted)" }} className="text-sm animate-pulse">
+            Loading changes...
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Timeline</h2>
-        <span className="text-xs text-muted-foreground">{changes.length} entries</span>
+    <div className="p-6 space-y-4 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="co-section-header co-animate-fade-in" style={{ padding: "0" }}>
+        <div className="flex items-center gap-3">
+          <Clock size={22} color="var(--co-accent)" />
+          <h2 className="co-section-title" style={{ fontSize: "20px" }}>Timeline</h2>
+        </div>
+        <span className="co-badge co-badge-secondary text-xs font-normal">
+          {changes.length} entries
+        </span>
       </div>
 
       {changes.length === 0 ? (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
-            <FileText size={32} className="mx-auto mb-2 opacity-40" />
-            <p>No changes recorded yet</p>
-            <p className="text-xs mt-1">File changes in your project will appear here</p>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <FileText
+              size={36}
+              color="var(--co-text-dim)"
+              className="mb-3 opacity-30"
+            />
+            <p style={{ color: "var(--co-text-muted)" }} className="text-sm font-medium">
+              No changes recorded yet
+            </p>
+            <p style={{ color: "var(--co-text-dim)" }} className="text-xs mt-1">
+              File changes in your project will appear here
+            </p>
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardContent className="p-0">
-            <div className="divide-y">
-              {changes.map((change) => (
-                <TimelineEntry key={change.id} change={change} />
-              ))}
-            </div>
+            <ScrollArea className="max-h-[calc(100vh-160px)]">
+              <div className="co-stagger divide-y" style={{ borderColor: "var(--co-border)" }}>
+                {changes.map((change) => (
+                  <TimelineEntry key={change.id} change={change} />
+                ))}
+              </div>
+            </ScrollArea>
           </CardContent>
         </Card>
       )}
@@ -53,43 +79,69 @@ export function TimelinePage({ projectPath }: TimelinePageProps) {
 }
 
 function TimelineEntry({ change }: { change: ChangeRecord }) {
+  const kindBadge: Record<string, string> = {
+    created: "co-badge co-badge-success border",
+    modified: "co-badge co-badge-default border",
+    deleted: "co-badge co-badge-danger border",
+  };
+
   return (
-    <div className="flex gap-4 px-4 py-3 hover:bg-accent/30 transition-colors">
+    <div className="co-change-item group" style={{ cursor: "default", borderColor: "var(--co-border)" }}>
       {/* Kind badge */}
       <div className="shrink-0 pt-0.5">
-        <Badge className={getChangeKindColor(change.kind)}>
+        <span className={cn(
+          "text-[10px] font-medium px-2 py-0.5 capitalize",
+          kindBadge[change.kind] || "co-badge co-badge-secondary border"
+        )}
+        style={{ borderColor: "var(--co-border)" }}>
           {change.kind}
-        </Badge>
+        </span>
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 space-y-1">
+      <div className="flex-1 min-w-0 space-y-1.5 ml-4">
         <div className="flex items-center gap-2">
-          <FileText size={14} className="text-muted-foreground shrink-0" />
-          <span className="text-sm font-medium truncate">
+          <FileText
+            size={14}
+            color="var(--co-text-dim)"
+            className="shrink-0 group-hover:text-foreground transition-colors"
+          />
+          <span className="text-sm font-medium truncate" style={{ color: "var(--co-text)" }}>
             {getFileName(change.relativePath)}
           </span>
         </div>
-        <div className="text-xs text-muted-foreground truncate">
+
+        <div className="text-xs truncate font-mono" style={{ color: "var(--co-text-muted)" }}>
           {change.relativePath}
         </div>
+
         {change.summary && (
-          <p className="text-xs text-muted-foreground line-clamp-2">{change.summary}</p>
+          <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: "var(--co-text-muted)" }}>
+            {change.summary}
+          </p>
         )}
-        <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+
+        <div className="flex items-center gap-3 text-xs pt-1" style={{ color: "var(--co-text-dim)" }}>
           {change.agent && (
-            <span className="flex items-center gap-1">
-              <User size={12} />
+            <span className="inline-flex items-center gap-1">
+              <User size={11} color="var(--co-accent)" />
               {change.agent}
             </span>
           )}
           {change.commitHash && (
-            <span className="flex items-center gap-1 font-mono">
-              <Hash size={12} />
-              {change.commitHash.slice(0, 7)}
+            <span className="inline-flex items-center gap-1 font-mono text-[11px]">
+              <Hash size={11} color="var(--co-text-dim)" />
+              <span
+                className="px-1.5 py-0.5 rounded text-[10px]"
+                style={{ background: "var(--co-bg-hover)" }}
+              >
+                {change.commitHash.slice(0, 7)}
+              </span>
             </span>
           )}
-          <span>{formatTimestamp(change.timestamp)}</span>
+          <span className="co-change-time">
+            {formatTimestamp(change.timestamp)}
+          </span>
         </div>
       </div>
     </div>

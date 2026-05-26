@@ -1,7 +1,7 @@
-// Main App component - orchestrates project selection and view routing
+// Main App component — orchestrates project selection and view routing
 
 import { useState } from "react";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppLayout } from "@/components/layout/AppLayout";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
 import { DashboardPage } from "@/pages/Dashboard";
 import { TimelinePage } from "@/pages/Timeline";
@@ -29,7 +29,7 @@ export default function App() {
 
   // Project is open → show main shell with views
   return (
-    <AppShell
+    <AppLayout
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as ViewTab)}
       projectName={project.name}
@@ -38,6 +38,6 @@ export default function App() {
       {activeTab === "dashboard" && <DashboardPage projectPath={project.path} />}
       {activeTab === "timeline" && <TimelinePage projectPath={project.path} />}
       {activeTab === "graph" && <GraphPage projectPath={project.path} />}
-    </AppShell>
+    </AppLayout>
   );
 }

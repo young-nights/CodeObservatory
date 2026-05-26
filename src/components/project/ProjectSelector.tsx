@@ -1,6 +1,6 @@
-// Project selector component — first screen when no project is open
-// Android Studio-inspired two-column layout with custom CSS theme
-// All colors via plain CSS classes (theme.css) to avoid cross-OS Tailwind issues
+// Project selector — co-theme design system
+// Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
+// No framer-motion; animated with co-animate-* CSS classes.
 
 import { useState } from "react";
 import {
@@ -13,8 +13,8 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { ProjectConfig } from "@/lib/types";
-import "@/styles/theme.css";
 
 interface ProjectSelectorProps {
   recentProjects: ProjectConfig[];
@@ -50,79 +50,71 @@ export function ProjectSelector({
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   return (
-    <div className="flex h-screen co-bg-main">
+    <div className="flex h-screen overflow-hidden" style={{ background: "var(--co-bg)" }}>
       {/* ════════════════════════════════════════════
           Left Sidebar
           ════════════════════════════════════════════ */}
-      <aside className="w-[220px] shrink-0 flex flex-col co-sidebar">
+      <aside className="co-sidebar co-animate-fade-in-left relative w-[220px] shrink-0 flex flex-col">
         {/* Branding */}
-        <div className="flex items-center gap-2.5 px-5 py-5 co-sidebar-brand">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg co-logo-badge">
-            <Telescope color="white" size={16} strokeWidth={2} />
+        <div className="co-sidebar-brand">
+          <div className="co-sidebar-brand-icon">
+            <Telescope size={16} strokeWidth={2} color="white" />
           </div>
-          <span className="text-sm co-sidebar-text">CodeObservatory</span>
+          <span className="co-sidebar-brand-text">CodeObservatory</span>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-3 space-y-0.5">
+        <nav className="co-sidebar-nav">
           <button
             onClick={() => setActiveNav("projects")}
             className={cn(
-              "w-full flex items-center gap-3 px-5 py-2.5 text-sm relative",
-              activeNav === "projects" ? "co-nav-item-active" : "co-nav-item",
+              "co-nav-item",
+              activeNav === "projects" && "co-nav-item-active"
             )}
           >
             {activeNav === "projects" && <span className="co-nav-indicator" />}
-            <FolderOpen
-              size={16}
-              className="shrink-0"
-              color={activeNav === "projects" ? "#818cf8" : "#475569"}
-            />
+            <FolderOpen size={16} className="shrink-0" />
             Projects
           </button>
 
           <button
             onClick={() => setActiveNav("settings")}
             className={cn(
-              "w-full flex items-center gap-3 px-5 py-2.5 text-sm relative",
-              activeNav === "settings" ? "co-nav-item-active" : "co-nav-item",
+              "co-nav-item",
+              activeNav === "settings" && "co-nav-item-active"
             )}
           >
             {activeNav === "settings" && <span className="co-nav-indicator" />}
-            <Settings
-              size={16}
-              className="shrink-0"
-              color={activeNav === "settings" ? "#818cf8" : "#475569"}
-            />
+            <Settings size={16} className="shrink-0" />
             Settings
           </button>
         </nav>
 
         {/* Version */}
-        <div className="px-5 py-3 co-sidebar-footer">
-          <span className="text-xs co-text-dim select-none">v0.1.0</span>
+        <div className="co-sidebar-footer">
+          <span className="co-sidebar-version">v0.1.0</span>
         </div>
       </aside>
 
       {/* ════════════════════════════════════════════
           Right Content Area
           ════════════════════════════════════════════ */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="co-animate-fade-in flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-10 pt-8 pb-4">
-          <h1 className="co-header-title">
+        <div className="co-section-header">
+          <h1 className="co-section-title">
             {activeNav === "projects" ? "Projects" : "Settings"}
           </h1>
 
           {activeNav === "projects" && (
-            <button
-              className="co-btn-primary"
+            <Button
               onClick={() => onOpenProject()}
               disabled={isInitializing}
+              size="sm"
             >
               {isInitializing ? (
                 <>
-                  <Loader2 className="animate-spin" size={14} />
+                  <Loader2 size={14} className="animate-spin" />
                   Initializing...
                 </>
               ) : (
@@ -131,107 +123,103 @@ export function ProjectSelector({
                   Open Project Directory
                 </>
               )}
-            </button>
+            </Button>
           )}
         </div>
 
-        <div className="px-10">
-          <hr className="co-divider" />
-        </div>
+        <hr className="co-separator mx-8" />
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-10 py-6">
+        <div
+          className="flex-1 overflow-y-auto px-8 py-6"
+          style={{ scrollbarColor: "var(--co-border-light) transparent" }}
+        >
           {activeNav === "projects" && (
-            <>
+            <div className="co-animate-fade-in">
               {recentProjects.length > 0 ? (
-                <div className="space-y-1.5 max-w-3xl">
+                <div className="max-w-3xl">
                   {/* Section header */}
                   <div className="flex items-center gap-2 mb-4">
-                    <span className="co-project-count-badge">
+                    <span className="co-badge co-badge-secondary h-5 w-5 flex items-center justify-center p-0 text-[10px] font-bold">
                       {recentProjects.length}
                     </span>
-                    <span className="co-section-label">Recent Projects</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--co-text-muted)" }}>
+                      Recent Projects
+                    </span>
                   </div>
 
-                  {/* Project list */}
-                  {recentProjects.map((proj, i) => (
-                    <div
-                      key={proj.path}
-                      onClick={() => onSelectRecent(proj.path)}
-                      onMouseEnter={() => setHoveredIndex(i)}
-                      onMouseLeave={() => setHoveredIndex(null)}
-                      className={cn(
-                        "co-card",
-                        "flex items-center gap-4 px-5 py-4 text-left",
-                        hoveredIndex === i &&
-                          "border-[rgba(99,102,241,0.15)] bg-[rgba(99,102,241,0.08)]",
-                      )}
-                    >
-                      {/* Folder icon */}
-                      <div
+                  {/* Project list with stagger animation */}
+                  <div className="co-stagger space-y-1.5">
+                    {recentProjects.map((proj, i) => (
+                      <button
+                        key={proj.path}
+                        onClick={() => onSelectRecent(proj.path)}
+                        onMouseEnter={() => setHoveredIndex(i)}
+                        onMouseLeave={() => setHoveredIndex(null)}
                         className={cn(
-                          "flex items-center justify-center w-10 h-10 shrink-0 co-card-folder-icon",
-                          hoveredIndex === i &&
-                            "bg-[rgba(99,102,241,0.2)]",
+                          "co-project-card",
+                          hoveredIndex === i && "co-project-card-active"
                         )}
                       >
-                        <FolderOpen
-                          size={18}
-                          color={hoveredIndex === i ? "#a5b4fc" : "#818cf8"}
-                        />
-                      </div>
-
-                      {/* Project info */}
-                      <div className="min-w-0 flex-1">
-                        <div className="co-card-title truncate">
-                          {proj.name}
+                        {/* Folder icon */}
+                        <div className="co-project-icon">
+                          <FolderOpen
+                            size={18}
+                            color={
+                              hoveredIndex === i
+                                ? "var(--co-accent)"
+                                : "var(--co-text-muted)"
+                            }
+                          />
                         </div>
-                        <div className="co-card-path truncate mt-0.5">
-                          {proj.path}
+
+                        {/* Project info */}
+                        <div className="min-w-0 flex-1">
+                          <p className="co-project-name truncate">
+                            {proj.name}
+                          </p>
+                          <p className="co-project-path truncate">
+                            {proj.path}
+                          </p>
                         </div>
-                      </div>
 
-                      {/* Timestamp */}
-                      <span className="co-card-time shrink-0">
-                        {formatLastOpened(proj.lastOpened)}
-                      </span>
+                        {/* Timestamp */}
+                        <span className="co-project-time">
+                          {formatLastOpened(proj.lastOpened)}
+                        </span>
 
-                      {/* Chevron */}
-                      <ChevronRight
-                        size={16}
-                        className={cn(
-                          "shrink-0 transition-all duration-200",
-                          hoveredIndex === i
-                            ? "co-text-accent translate-x-0.5"
-                            : "co-text-dim",
-                        )}
-                      />
-                    </div>
-                  ))}
+                        {/* Chevron */}
+                        <ChevronRight size={16} className="co-project-chevron" />
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 /* Empty state */
-                <div className="flex flex-col items-center justify-center h-full max-w-xs mx-auto text-center">
-                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6 co-empty-icon">
+                <div className="co-animate-fade-in co-empty-state">
+                  <div className="co-empty-icon">
                     <FolderSearch
                       size={36}
-                      color="#64748b"
+                      color="var(--co-text-muted)"
                       strokeWidth={1.5}
                     />
                   </div>
                   <p className="co-empty-text">
-                    选择你的第一个项目开始追踪代码变更
+                    Select your first project to start tracking code changes
                   </p>
                 </div>
               )}
-            </>
+            </div>
           )}
 
-          {/* Settings panel */}
           {activeNav === "settings" && (
-            <div className="flex flex-col items-center justify-center h-full max-w-xs mx-auto text-center gap-4">
-              <Settings size={48} color="#475569" strokeWidth={1} />
-              <p className="co-settings-placeholder-text">
+            <div className="co-animate-fade-in flex flex-col items-center justify-center h-full max-w-xs mx-auto text-center gap-4">
+              <Settings
+                size={48}
+                color="var(--co-text-dim)"
+                strokeWidth={1}
+              />
+              <p style={{ color: "var(--co-text-muted)" }} className="text-sm">
                 Settings coming soon
               </p>
             </div>
