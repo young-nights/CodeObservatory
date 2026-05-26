@@ -1,5 +1,6 @@
 // Sidebar — 200px precision navigation
 // Design: Precision Instrument · OKLCH · serif brand · 2px accent indicator
+// Obsidian-style collapsible sidebar with animated transition
 
 import { cn } from "@/lib/utils";
 import {
@@ -7,12 +8,14 @@ import {
   LayoutDashboard,
   Activity,
   Share2,
+  PanelRight,
 } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 const navItems = [
@@ -25,18 +28,24 @@ export function Sidebar({
   activeTab,
   onTabChange,
   collapsed = false,
+  onToggle,
 }: SidebarProps) {
   return (
     <aside
       className={cn(
-        "co-sidebar flex flex-col h-screen relative shrink-0 transition-all",
-        collapsed ? "w-[56px]" : "w-[200px]"
+        "co-sidebar flex flex-col h-screen relative shrink-0",
+        collapsed ? "w-[48px]" : "w-[200px]"
       )}
-      style={{ transitionDuration: "var(--co-duration-normal)" }}
+      style={{ transition: "width 0.2s ease" }}
     >
       {/* Brand — serif 18px Georgia -0.01em */}
-      <div className="co-sidebar-brand shrink-0">
-        <div className="co-sidebar-brand-icon">
+      <div
+        className={cn(
+          "co-sidebar-brand shrink-0",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <div className="co-sidebar-brand-icon flex-shrink-0">
           <Telescope size={16} strokeWidth={2} />
         </div>
         {!collapsed && (
@@ -77,16 +86,27 @@ export function Sidebar({
         })}
       </nav>
 
-      {/* Footer — version 10px, right aligned */}
-      <div className="co-sidebar-footer shrink-0">
-        <div
-          className={cn(
-            "co-sidebar-version",
-            collapsed && "text-center"
-          )}
-        >
-          v0.1.0
-        </div>
+      {/* Footer — version + collapse toggle */}
+      <div
+        className={cn(
+          "co-sidebar-footer shrink-0",
+          collapsed && "px-0 flex justify-center"
+        )}
+      >
+        {!collapsed ? (
+          <>
+            <span className="co-sidebar-version">v0.1.0</span>
+            <button
+              onClick={onToggle}
+              className="co-sidebar-collapse-btn"
+              title="Collapse sidebar"
+            >
+              <PanelRight size={14} />
+            </button>
+          </>
+        ) : (
+          <span className="co-sidebar-version">v0.1</span>
+        )}
       </div>
     </aside>
   );

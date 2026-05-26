@@ -193,6 +193,30 @@ html, body, #root {
   user-select: none;
 }
 
+/* ---------- Sidebar Collapse Button ---------- */
+.co-sidebar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.co-sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--co-radius-sm);
+  border: none;
+  background: none;
+  color: var(--co-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.co-sidebar-collapse-btn:hover {
+  color: var(--co-text);
+  background: var(--co-bg-hover);
+}
+
 /* ============================================================
    TopBar
    ============================================================ */
@@ -228,6 +252,26 @@ html, body, #root {
 }
 .co-status-dot-online { background: var(--co-success); box-shadow: 0 0 6px rgba(34, 197, 94, 0.4); }
 .co-status-dot-offline { background: var(--co-text-dim); }
+
+/* ---------- TopBar Expand Button (collapsed sidebar) ---------- */
+.co-topbar-expand-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--co-radius-sm);
+  border: none;
+  background: none;
+  color: var(--co-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-right: 4px;
+}
+.co-topbar-expand-btn:hover {
+  color: var(--co-text);
+  background: var(--co-bg-hover);
+}
 
 /* ============================================================
    Buttons

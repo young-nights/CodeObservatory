@@ -1,20 +1,38 @@
 // TopBar — 44px, serif project name, watcher dot + text
 // Design: Precision Instrument · no glass · no badges
+// Obsidian-style: expand button when sidebar is collapsed
 
 import { cn } from "@/lib/utils";
-import { FolderOpen, ChevronRight } from "lucide-react";
+import { FolderOpen, ChevronRight, PanelLeft } from "lucide-react";
 
 interface TopBarProps {
   projectName?: string;
   watcherRunning?: boolean;
   children?: React.ReactNode;
+  collapsed?: boolean;
+  onExpand?: () => void;
 }
 
-export function TopBar({ projectName, watcherRunning, children }: TopBarProps) {
+export function TopBar({
+  projectName,
+  watcherRunning,
+  children,
+  collapsed,
+  onExpand,
+}: TopBarProps) {
   return (
     <header className="co-topbar shrink-0">
-      {/* Left: serif project name breadcrumb */}
+      {/* Left: expand button (when collapsed) + serif project name breadcrumb */}
       <div className="co-topbar-breadcrumb min-w-0">
+        {collapsed && (
+          <button
+            onClick={onExpand}
+            className="co-topbar-expand-btn"
+            title="Expand sidebar"
+          >
+            <PanelLeft size={16} />
+          </button>
+        )}
         {projectName ? (
           <div className="co-animate-fade-in flex items-center gap-2 min-w-0">
             <FolderOpen
