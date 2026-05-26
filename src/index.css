@@ -39,6 +39,40 @@
   --co-font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
 }
 
+/* ---------- Light Theme ---------- */
+:root[data-theme="light"] {
+  --co-bg: #ffffff;
+  --co-bg-card: #f5f5f5;
+  --co-bg-sidebar: #fafafa;
+  --co-bg-hover: #f0f0f0;
+  --co-bg-active: rgba(99, 102, 241, 0.08);
+  --co-border: #e4e4e7;
+  --co-border-light: #d4d4d8;
+  --co-border-active: rgba(99, 102, 241, 0.3);
+  --co-text: #18181b;
+  --co-text-secondary: #71717a;
+  --co-text-muted: #a1a1aa;
+  --co-text-dim: #d4d4d8;
+  --co-accent: #4f46e5;
+  --co-accent-light: #6366f1;
+  --co-accent-bg: rgba(99, 102, 241, 0.1);
+  --co-primary: #4f46e5;
+  --co-primary-hover: #6366f1;
+  --co-success: #16a34a;
+  --co-warning: #d97706;
+  --co-danger: #dc2626;
+  --co-radius: 10px;
+  --co-radius-sm: 6px;
+  --co-radius-lg: 14px;
+  --co-radius-xl: 18px;
+  --co-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --co-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --co-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --co-glow: 0 0 20px rgba(99, 102, 241, 0.1);
+  --co-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --co-font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+}
+
 /* ---------- Base Reset ---------- */
 *,
 *::before,
@@ -630,3 +664,13 @@ html, body, #root {
 .co-stagger > *:nth-child(8) { animation-delay: 0.30s; }
 .co-stagger > *:nth-child(9) { animation-delay: 0.34s; }
 .co-stagger > *:nth-child(10) { animation-delay: 0.38s; }
+
+/* ============================================================
+   Light Theme Overrides
+   ============================================================ */
+[data-theme="light"] .co-glass {
+  background: rgba(255, 255, 255, 0.85);
+}
+[data-theme="light"] .co-glass-subtle {
+  background: rgba(255, 255, 255, 0.65);
+}

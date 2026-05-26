@@ -11,9 +11,12 @@ import {
   ChevronRight,
   FolderSearch,
   Settings,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/hooks/useTheme";
 import type { ProjectConfig } from "@/lib/types";
 
 interface ProjectSelectorProps {
@@ -48,6 +51,7 @@ export function ProjectSelector({
 }: ProjectSelectorProps) {
   const [activeNav, setActiveNav] = useState<NavItem>("projects");
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const { theme, setTheme } = useTheme();
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--co-bg)" }}>
@@ -213,15 +217,63 @@ export function ProjectSelector({
           )}
 
           {activeNav === "settings" && (
-            <div className="co-animate-fade-in flex flex-col items-center justify-center h-full max-w-xs mx-auto text-center gap-4">
-              <Settings
-                size={48}
-                color="var(--co-text-dim)"
-                strokeWidth={1}
-              />
-              <p style={{ color: "var(--co-text-muted)" }} className="text-sm">
-                Settings coming soon
-              </p>
+            <div className="co-animate-fade-in py-6 max-w-lg">
+              <div className="co-card">
+                <div className="co-card-header">
+                  <h3 className="co-card-title">Appearance</h3>
+                  <p className="co-card-desc">Choose your preferred theme</p>
+                </div>
+                <div className="co-card-content">
+                  <div
+                    className="inline-flex rounded-md border p-0.5"
+                    style={{
+                      borderColor: "var(--co-border)",
+                      background: "var(--co-bg-sidebar)",
+                    }}
+                  >
+                    <button
+                      onClick={() => setTheme("dark")}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all",
+                        theme === "dark"
+                          ? "text-white"
+                          : "text-[var(--co-text-muted)] hover:text-[var(--co-text)]"
+                      )}
+                      style={
+                        theme === "dark"
+                          ? {
+                              background:
+                                "linear-gradient(135deg, var(--co-primary), #7c3aed)",
+                            }
+                          : { background: "transparent" }
+                      }
+                    >
+                      <Moon size={16} />
+                      Dark
+                    </button>
+                    <button
+                      onClick={() => setTheme("light")}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded text-sm font-medium transition-all",
+                        theme === "light"
+                          ? "text-white"
+                          : "text-[var(--co-text-muted)] hover:text-[var(--co-text)]"
+                      )}
+                      style={
+                        theme === "light"
+                          ? {
+                              background:
+                                "linear-gradient(135deg, var(--co-primary), #7c3aed)",
+                            }
+                          : { background: "transparent" }
+                      }
+                    >
+                      <Sun size={16} />
+                      Light
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
