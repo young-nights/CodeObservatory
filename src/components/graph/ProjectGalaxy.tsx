@@ -149,10 +149,12 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       const rg = new THREE.RingGeometry(s*1.5, s*2.5, 64);
       g.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: n.color, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })));
     }
-    // Root gets an extra large glow aura
+    // Root gets mega glow aura — light explosion effect
     if (n.type === "root") {
-      const aura = new THREE.RingGeometry(s*2.5, s*4, 64);
-      g.add(new THREE.Mesh(aura, new THREE.MeshBasicMaterial({ color: n.color, side: THREE.DoubleSide, transparent: true, opacity: 0.06 })));
+      const a1 = new THREE.RingGeometry(s*2, s*4, 64);
+      g.add(new THREE.Mesh(a1, new THREE.MeshBasicMaterial({ color: "#ffffff", side: THREE.DoubleSide, transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false })));
+      const a2 = new THREE.RingGeometry(s*3.5, s*6, 64);
+      g.add(new THREE.Mesh(a2, new THREE.MeshBasicMaterial({ color: "#a5b4fc", side: THREE.DoubleSide, transparent: true, opacity: 0.04, blending: THREE.AdditiveBlending, depthWrite: false })));
     }
     return g;
   }, [settings.nodeSize]);
@@ -181,7 +183,13 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           backgroundColor={clr.bg} showNavInfo={false}
           cameraPosition={camPos}
           nodeThreeObject={nodeObj} nodeVal={(n:any) => (n as FGNode).val}
-          linkWidth={0.2} linkColor={() => `rgba(${isDark ? "136,128,255" : "99,102,241"},${settings.edgeOpacity * 0.6})`}
+          linkWidth={0.2} linkColor={(link: any) => {
+            // Gradient from center: warmer near root, cooler at edges
+            const depth = link.source?.depth ?? link.target?.depth ?? 99;
+            if (depth <= 1) return `rgba(${isDark ? "255,255,255" : "120,120,200"},${settings.edgeOpacity})`;
+            if (depth <= 2) return `rgba(${isDark ? "200,180,255" : "99,102,241"},${settings.edgeOpacity * 0.8})`;
+            return `rgba(${isDark ? "136,128,255" : "80,90,220"},${settings.edgeOpacity * 0.5})`;
+          }}
           linkDirectionalParticles={4} linkDirectionalParticleSpeed={0.002} linkDirectionalParticleWidth={2}
           linkDirectionalParticleColor={() => isDark ? "#c4b5fd" : "#818cf8"}
           d3VelocityDecay={0.3} d3AlphaDecay={0.015} cooldownTicks={250}
