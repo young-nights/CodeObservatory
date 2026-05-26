@@ -1,18 +1,20 @@
-// AppShell — Deep Space Galaxy layout shell
-// Sidebar (200/48px) + TopBar (44px) + main content
+// AppShell — Cursor/Linear/Arc style minimal shell
+// Sidebar (200px ↔ 0px) + TopBar (48px) + main content
+// framer-motion AnimatePresence for page transitions
 // Exports SidebarContext for child components
 
 import { type ReactNode, createContext, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 
 export const SidebarContext = createContext<{ collapsed: boolean }>({ collapsed: false });
 
-const STORAGE_KEY = "code-observatory-sidebar-collapsed";
+const STORAGE_KEY = "co-sidebar";
 
 function getInitialCollapsed(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "true";
+    return localStorage.getItem(STORAGE_KEY) === "1";
   } catch {
     return false;
   }
@@ -35,44 +37,48 @@ export function AppShell({
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(getInitialCollapsed);
 
-  const handleToggle = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem(STORAGE_KEY, String(next)); } catch { /* ignore */ }
-      return next;
+  const toggle = useCallback(() => {
+    setCollapsed((v) => {
+      const n = !v;
+      try { localStorage.setItem(STORAGE_KEY, n ? "1" : "0"); } catch { /* ignore */ }
+      return n;
     });
   }, []);
 
-  const handleExpand = useCallback(() => {
-    setCollapsed(false);
-    try { localStorage.setItem(STORAGE_KEY, "false"); } catch { /* ignore */ }
-  }, []);
-
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--cosmic-bg)" }}>
-      {/* Sidebar — 200/48px dual mode */}
-      <Sidebar
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        collapsed={collapsed}
-        onToggle={handleToggle}
-      />
-
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar
-          projectName={projectName}
-          watcherRunning={watcherRunning}
+    <SidebarContext.Provider value={{ collapsed }}>
+      <div className="flex h-screen overflow-hidden" style={{ background: "#09090b" }}>
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={onTabChange}
           collapsed={collapsed}
-          onExpand={handleExpand}
+          onToggle={toggle}
         />
 
-        <SidebarContext.Provider value={{ collapsed }}>
-          <main className="flex-1 overflow-hidden relative">
-            {children}
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar
+            projectName={projectName}
+            watcherRunning={watcherRunning}
+            collapsed={collapsed}
+            onExpandSidebar={() => setCollapsed(false)}
+          />
+
+          <main className="flex-1 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className="h-full"
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
           </main>
-        </SidebarContext.Provider>
+        </div>
       </div>
-    </div>
+    </SidebarContext.Provider>
   );
 }

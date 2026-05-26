@@ -1,111 +1,149 @@
-// Sidebar — Cosmic theme, 200px / 48px dual mode
-// Telescope branding, serif font, collapsible navigation
+// Sidebar — Cursor-style minimal sidebar
+// 200px expanded, 0px collapsed (fully hidden)
+// Cyan (#06b6d4) active indicator, dark zinc palette
+// System font (Inter fallback), no serif
 
-import { cn } from "@/lib/utils";
-import {
-  Telescope,
-  LayoutDashboard,
-  Activity,
-  Share2,
-  PanelRight,
-} from "lucide-react";
+import { motion } from "framer-motion";
+import { Telescope, LayoutDashboard, Activity, Share2, Settings, PanelRight } from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  collapsed?: boolean;
-  onToggle?: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={14} /> },
-  { id: "timeline", label: "Timeline", icon: <Activity size={14} /> },
-  { id: "graph", label: "Graph", icon: <Share2 size={14} /> },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "timeline", label: "Timeline", icon: Activity },
+  { id: "graph", label: "Graph", icon: Share2 },
 ];
 
-export function Sidebar({
-  activeTab,
-  onTabChange,
-  collapsed = false,
-  onToggle,
-}: SidebarProps) {
+const CYAN = "#06b6d4";
+
+export function Sidebar({ activeTab, onTabChange, collapsed, onToggle }: SidebarProps) {
   return (
-    <aside
-      className={cn(
-        "co-sidebar co-sidebar-transition flex flex-col h-screen relative shrink-0",
-        collapsed ? "w-[48px]" : "w-[200px]",
-      )}
+    <motion.aside
+      animate={{ width: collapsed ? 0 : 200 }}
+      transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+      className="flex flex-col h-screen shrink-0 overflow-hidden"
+      style={{ background: "#0c0c0e", borderRight: "1px solid #1a1a1e" }}
     >
-      {/* Brand — Telescope icon + serif name */}
+      {/* Brand */}
       <div
-        className={cn(
-          "co-sidebar-brand shrink-0",
-          collapsed && "justify-center px-0",
-        )}
+        className="flex items-center gap-3 shrink-0 whitespace-nowrap"
+        style={{ padding: "16px 16px 12px" }}
       >
-        <div className="co-sidebar-brand-icon flex-shrink-0">
+        <div
+          className="flex items-center justify-center rounded-md shrink-0"
+          style={{
+            width: 28,
+            height: 28,
+            background: CYAN,
+            color: "#09090b",
+          }}
+        >
           <Telescope size={16} strokeWidth={2} />
         </div>
-        {!collapsed && (
-          <span className="co-sidebar-brand-text co-animate-fade-in">
-            CodeObservatory
-          </span>
-        )}
+        <span
+          className="font-semibold tracking-tight"
+          style={{ fontSize: 15, color: "#e4e4e7" }}
+        >
+          CodeObservatory
+        </span>
       </div>
 
       {/* Separator */}
-      <div className="co-sidebar-separator" />
+      <div
+        className="shrink-0 mx-3 opacity-60"
+        style={{ height: 1, background: "#1a1a1e" }}
+      />
 
       {/* Navigation */}
-      <nav className="co-sidebar-nav">
+      <nav
+        className="flex-1 flex flex-col shrink-0"
+        style={{ padding: "8px 8px", gap: 2 }}
+      >
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
+          const Icon = item.icon;
           return (
-            <div key={item.id} className="relative">
-              <button
-                onClick={() => onTabChange(item.id)}
-                className={cn(
-                  "co-nav-item",
-                  isActive && "co-nav-item-active",
-                  collapsed && "justify-center px-0",
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                {isActive && <span className="co-nav-indicator" />}
-                <span className={cn(isActive && "relative z-10")}>{item.icon}</span>
-                {!collapsed && (
-                  <span className={cn(isActive && "relative z-10")}>
-                    {item.label}
-                  </span>
-                )}
-              </button>
-            </div>
+            <button
+              key={item.id}
+              onClick={() => onTabChange(item.id)}
+              className="flex items-center gap-3 w-full rounded-md transition-colors duration-150"
+              style={{
+                height: 36,
+                padding: "0 12px",
+                fontSize: 13,
+                color: isActive ? "#e4e4e7" : "#71717a",
+                background: isActive ? "rgba(6,182,212,0.06)" : "transparent",
+                borderLeft: isActive ? `2px solid ${CYAN}` : "2px solid transparent",
+                fontWeight: isActive ? 500 : 400,
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.color = "#e4e4e7";
+                  e.currentTarget.style.background = "rgba(6,182,212,0.04)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.color = "#71717a";
+                  e.currentTarget.style.background = "transparent";
+                }
+              }}
+            >
+              <Icon size={16} strokeWidth={isActive ? 2 : 1.5} />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
           );
         })}
       </nav>
 
-      {/* Footer — version + collapse toggle */}
+      {/* Footer */}
       <div
-        className={cn(
-          "co-sidebar-footer shrink-0",
-          collapsed && "px-0 justify-center",
-        )}
+        className="flex items-center justify-between shrink-0 whitespace-nowrap"
+        style={{
+          padding: "12px 12px",
+          borderTop: "1px solid #1a1a1e",
+          fontSize: 12,
+          color: "#71717a",
+        }}
       >
-        {!collapsed ? (
-          <>
-            <span className="co-sidebar-version">v0.1.0</span>
-            <button
-              onClick={onToggle}
-              className="co-sidebar-collapse-btn"
-              title="Collapse sidebar"
-            >
-              <PanelRight size={14} />
-            </button>
-          </>
-        ) : (
-          <span className="co-sidebar-version">v0.1</span>
-        )}
+        <div className="flex items-center gap-3">
+          <Settings
+            size={14}
+            style={{ color: "#52525b", cursor: "pointer" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#a1a1aa"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#52525b"; }}
+          />
+          <span style={{ fontSize: 11 }}>v0.1.0</span>
+        </div>
+        <button
+          onClick={onToggle}
+          className="flex items-center justify-center rounded-md transition-colors duration-150"
+          style={{
+            width: 26,
+            height: 26,
+            border: "none",
+            background: "none",
+            color: "#52525b",
+            cursor: "pointer",
+          }}
+          title="Collapse sidebar"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#a1a1aa";
+            e.currentTarget.style.background = "rgba(6,182,212,0.06)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "#52525b";
+            e.currentTarget.style.background = "none";
+          }}
+        >
+          <PanelRight size={14} />
+        </button>
       </div>
-    </aside>
+    </motion.aside>
   );
 }
