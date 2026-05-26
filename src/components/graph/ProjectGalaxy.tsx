@@ -165,18 +165,18 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   // Blazing starfield background
   const bgStars = useMemo(() => {
-    const count = 8000;
+    const count = 15000;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      const r = 25 + Math.random() * 150;
+      const r = 20 + Math.random() * 180;
       const th = Math.random() * Math.PI * 2;
       const ph = Math.acos(2 * Math.random() - 1);
       pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
       pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
       pos[i * 3 + 2] = r * Math.cos(ph);
-      const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.35, 0.3 + Math.random() * 0.3, 0.4 + Math.random() * 0.5);
+      const c = new THREE.Color().setHSL(0.55 + Math.random() * 0.35, 0.25 + Math.random() * 0.25, 0.5 + Math.random() * 0.5);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
