@@ -152,12 +152,16 @@ function computeRadialLayout(
   depth1Nodes.forEach((node, i) => {
     const angle = (i / d1Count) * Math.PI * 2;
     const r = RING_RADII.planet;
-    const z = (Math.random() - 0.5) * 20;
+    const jitter = 5;
+    const z = (Math.random() - 0.5) * 8;
     const d = depthMap.get(node.id) ?? 1;
     const rn: RadialNode = {
       id: node.id, name: node.label, path: node.path,
       type: "planet", color: d === 1 ? clr.dirCyan : clr.dirPurple,
-      radius: r, angle, x: Math.cos(angle) * r, y: z, z: Math.sin(angle) * r,
+      radius: r, angle,
+      x: Math.cos(angle) * r + (Math.random() - 0.5) * jitter,
+      y: z,
+      z: Math.sin(angle) * r + (Math.random() - 0.5) * jitter,
       depth: d,
     };
     radialNodes.set(node.id, rn);
@@ -191,14 +195,17 @@ function computeRadialLayout(
         ? parentAngle
         : sectorStart + (i / (count - 1)) * sectorSize;
       const r = RING_RADII.star + (Math.random() - 0.5) * 20;
-      const z = (Math.random() - 0.5) * 15;
+      const jitter = 5;
+      const z = (Math.random() - 0.5) * 8;
       const ext = node.extension?.toLowerCase() ?? "";
       const rn: RadialNode = {
         id: node.id, name: node.label, path: node.path,
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
         radius: r, angle,
-        x: Math.cos(angle) * r, y: z, z: Math.sin(angle) * r,
+        x: Math.cos(angle) * r + (Math.random() - 0.5) * jitter,
+        y: z,
+        z: Math.sin(angle) * r + (Math.random() - 0.5) * jitter,
         extension: node.extension, size: node.size,
         depth: 2,
       };
@@ -219,7 +226,7 @@ function computeRadialLayout(
       const spread = 0.15;
       const angle = parentAngle + (Math.random() - 0.5) * spread;
       const r = RING_RADII.dust + (Math.random() - 0.5) * 25;
-      const z = (Math.random() - 0.5) * 10;
+      const z = (Math.random() - 0.5) * 8;
       const rn: RadialNode = {
         id: node.id, name: node.label, path: node.path,
         type: "dust",
@@ -245,6 +252,108 @@ function computeRadialLayout(
   }
 
   return { nodes: resultNodes, edges: resultEdges };
+}
+
+// ══════════════════════════════════════════════════════════
+// FLOW PARTICLES (animated dots along edges)
+// ══════════════════════════════════════════════════════════
+const MAX_FLOW_POINTS = 3000;
+
+function FlowParticles({ edges }: { edges: RadialEdge[] }) {
+  const ref = useRef<THREE.Points>(null);
+
+  const { positions, colors, curves, ptsPerEdge } = useMemo(() => {
+    if (edges.length === 0) return { positions: new Float32Array(0), colors: new Float32Array(0), curves: [] as THREE.QuadraticBezierCurve3[], ptsPerEdge: 0 };
+    const totalPts = Math.min(edges.length * 20, MAX_FLOW_POINTS);
+    const ppe = Math.max(1, Math.floor(totalPts / edges.length));
+    const pos = new Float32Array(edges.length * ppe * 3);
+    const cols = new Float32Array(edges.length * ppe * 3);
+    const crvs: THREE.QuadraticBezierCurve3[] = [];
+
+    let idx = 0;
+    for (const edge of edges) {
+      const from = new THREE.Vector3(edge.from.x, edge.from.y, edge.from.z);
+      const to = new THREE.Vector3(edge.to.x, edge.to.y, edge.to.z);
+      const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
+      const pushAmount = 25;
+      let control: THREE.Vector3;
+      if (mid.length() > 0.01) {
+        control = mid.clone().add(mid.clone().normalize().multiplyScalar(pushAmount));
+      } else {
+        control = new THREE.Vector3((from.x + to.x) / 2, (from.y + to.y) / 2 + 15, (from.z + to.z) / 2);
+      }
+      const curve = new THREE.QuadraticBezierCurve3(from, control, to);
+      crvs.push(curve);
+
+      const col = new THREE.Color(edge.color);
+      for (let pi = 0; pi < ppe; pi++) {
+        const t = pi / ppe;
+        const pt = curve.getPoint(t);
+        pos[idx * 3] = pt.x;
+        pos[idx * 3 + 1] = pt.y;
+        pos[idx * 3 + 2] = pt.z;
+        cols[idx * 3] = col.r;
+        cols[idx * 3 + 1] = col.g;
+        cols[idx * 3 + 2] = col.b;
+        idx++;
+      }
+    }
+
+    return { positions: pos, colors: cols, curves: crvs, ptsPerEdge: ppe };
+  }, [edges]);
+
+  // Phase offsets: each particle starts at a random point along the curve
+  const offsets = useRef<Float32Array>(new Float32Array());
+  if (offsets.current.length !== curves.length * ptsPerEdge) {
+    const o = new Float32Array(curves.length * ptsPerEdge);
+    for (let i = 0; i < o.length; i++) o[i] = Math.random();
+    offsets.current = o;
+  }
+
+  useFrame((_, delta) => {
+    if (!ref.current || curves.length === 0) return;
+    const posArr = ref.current.geometry.attributes.position.array as Float32Array;
+    const off = offsets.current;
+    const speed = 0.15;
+
+    let idx = 0;
+    for (const curve of curves) {
+      for (let pi = 0; pi < ptsPerEdge; pi++) {
+        off[idx] = (off[idx] + speed * delta) % 1;
+        const t = off[idx];
+        const pt = curve.getPoint(t);
+        posArr[idx * 3] = pt.x;
+        posArr[idx * 3 + 1] = pt.y;
+        posArr[idx * 3 + 2] = pt.z;
+        idx++;
+      }
+    }
+    ref.current.geometry.attributes.position.needsUpdate = true;
+  });
+
+  if (edges.length === 0) return null;
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          args={[positions, 3]}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          args={[colors, 3]}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.08}
+        vertexColors
+        sizeAttenuation
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </points>
+  );
 }
 
 // ══════════════════════════════════════════════════════════
@@ -548,6 +657,9 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             sizeAttenuation
             blending={THREE.AdditiveBlending}
             depthWrite={false}
+            toneMapped={false}
+            opacity={0.9}
+            transparent
           />
         </points>
       )}
@@ -566,6 +678,8 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             roughness={0.25}
             metalness={0.05}
             toneMapped={false}
+            emissive={new THREE.Color("#80b0ff")}
+            emissiveIntensity={1.5}
           />
         </instancedMesh>
       )}
@@ -583,10 +697,21 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         </mesh>
       )}
 
-      {/* ── Root sun ── */}
+      {/* ── Flow particles along edges ── */}
+      <FlowParticles edges={layout.edges} />
+
+      {/* ── Root sun: blue-white gradient glow ── */}
       {rootNode && (
         <group>
-          {/* Main sphere */}
+          {/* PointLight at core */}
+          <pointLight
+            position={[0, 0, 0]}
+            intensity={8}
+            color="#80b0ff"
+            distance={200}
+            decay={2}
+          />
+          {/* Core sphere */}
           <mesh
             onClick={handleRootClick}
             onPointerOver={handleRootPointerOver}
@@ -594,22 +719,22 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
           >
             <sphereGeometry args={[2.5 * settings.nodeSize, 48, 48]} />
             <meshStandardMaterial
-              color={clr.root}
-              emissive={clr.root}
-              emissiveIntensity={isDark ? 6.0 : 3.0}
+              color="#e0f0ff"
+              emissive="#e0f0ff"
+              emissiveIntensity={8}
               roughness={0.05}
               metalness={0.02}
               toneMapped={false}
             />
           </mesh>
-          {/* Inner glow ring (xy plane) */}
+          {/* Mid glow ring (xy plane) */}
           <mesh rotation={[0, 0, 0]}>
             <ringGeometry args={[3.5 * settings.nodeSize, 5.5 * settings.nodeSize, 80]} />
             <meshBasicMaterial
-              color={clr.root}
+              color="#80b0ff"
               side={THREE.DoubleSide}
               transparent
-              opacity={0.15}
+              opacity={0.25}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
@@ -618,10 +743,10 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <ringGeometry args={[4.5 * settings.nodeSize, 7.5 * settings.nodeSize, 80]} />
             <meshBasicMaterial
-              color={isDark ? "#a5b4fc" : "#818cf8"}
+              color="#4040c0"
               side={THREE.DoubleSide}
               transparent
-              opacity={0.06}
+              opacity={0.12}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
@@ -630,9 +755,9 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
           <mesh>
             <sphereGeometry args={[6.0 * settings.nodeSize, 32, 32]} />
             <meshBasicMaterial
-              color={clr.root}
+              color="#80b0ff"
               transparent
-              opacity={0.04}
+              opacity={0.06}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
             />
@@ -730,7 +855,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     >
       {!loading && layout.nodes.length > 0 ? (
         <Canvas
-          camera={{ position: [0, 60, 140], fov: 45, near: 0.1, far: 1000 }}
+          camera={{ position: [0, 30, 120], fov: 50, near: 0.1, far: 1000 }}
           gl={{ antialias: true, alpha: false }}
           style={{ width: canvasW, height: dim.h - 48 }}
           onPointerMissed={() => setSelectedId(null)}
@@ -909,6 +1034,37 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           </div>
         </div>
       )}
+
+      {/* ── HUD overlay panel ── */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
+          padding: "24px 32px 16px",
+          pointerEvents: "none",
+          zIndex: 15,
+        }}
+      >
+        {selectedNode ? (
+          <div style={{ display: "flex", gap: 16, alignItems: "center", color: "#e0e7ff", fontSize: 13 }}>
+            <span style={{ color: selectedNode.color || "#e0e7ff" }}>●</span>
+            <span style={{ fontWeight: 600 }}>{selectedNode.name}</span>
+            <span style={{ color: "#a1a1aa", fontSize: 11 }}>{selectedNode.type}</span>
+            {selectedNode.path && (
+              <span style={{ color: "#71717a", fontSize: 11 }}>{selectedNode.path}</span>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 32, color: "#a1a1aa", fontSize: 12 }}>
+            <span>● {cnt} Nodes</span>
+            <span>● {layout.edges.length} Connections</span>
+            <span>OrbitControls: drag/zoom</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
