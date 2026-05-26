@@ -1,11 +1,10 @@
-// Sidebar navigation — co-theme design system
+// Sidebar navigation — Linear-inspired co-theme design system
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
 
 import { cn } from "@/lib/utils";
 import {
   Telescope,
   LayoutDashboard,
-  GitBranch,
   Share2,
   Settings,
   User,
@@ -26,10 +25,10 @@ interface SidebarProps {
   collapsed?: boolean;
 }
 
-const navItems: { id: string; label: string; icon: React.ReactNode }[] = [
-  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
-  { id: "timeline", label: "Timeline", icon: <Activity size={18} /> },
-  { id: "graph", label: "Graph", icon: <Share2 size={18} /> },
+const navItems = [
+  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={14} /> },
+  { id: "timeline", label: "Timeline", icon: <Activity size={14} /> },
+  { id: "graph", label: "Graph", icon: <Share2 size={14} /> },
 ];
 
 export function Sidebar({
@@ -64,12 +63,10 @@ export function Sidebar({
           return (
             <div key={item.id} className="relative">
               <button
-                disabled={item.disabled}
                 onClick={() => onTabChange(item.id)}
                 className={cn(
                   "co-nav-item",
                   isActive && "co-nav-item-active",
-                  item.disabled && "opacity-50 cursor-not-allowed",
                   collapsed && "justify-center px-0"
                 )}
                 title={collapsed ? item.label : undefined}

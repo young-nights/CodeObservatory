@@ -1,4 +1,4 @@
-// Graph page — Obsidian-style file relationship visualization
+// Graph page — Linear-inspired file relationship visualization
 // Dark minimal background with dot nodes and fine connections.
 
 import { useEffect, useRef, useCallback, useState } from "react";
@@ -14,34 +14,36 @@ import {
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Obsidian-style muted colour palette
+// Linear-inspired palette for node types
 // ---------------------------------------------------------------------------
-const OBSIDIAN_COLORS: Record<string, string> = {
-  dir: "#daa520",
-  ts: "#4a9eff",
-  tsx: "#4a9eff",
-  rs: "#e06c75",
-  json: "#e5c07b",
-  toml: "#e5c07b",
-  yaml: "#e5c07b",
-  yml: "#e5c07b",
-  md: "#c678dd",
-  css: "#98c379",
-  html: "#98c379",
-  scss: "#98c379",
-  c: "#abb2bf",
-  h: "#abb2bf",
-  cpp: "#abb2bf",
-  hpp: "#abb2bf",
-  py: "#56b6c2",
-  default: "#5c6370",
+const NODE_COLORS: Record<string, string> = {
+  dir: "#d19a00",
+  ts: "#5e6ad2",
+  tsx: "#5e6ad2",
+  js: "#5e6ad2",
+  jsx: "#5e6ad2",
+  rs: "#e5484d",
+  json: "#d19a00",
+  toml: "#d19a00",
+  yaml: "#d19a00",
+  yml: "#d19a00",
+  md: "#8b5cf6",
+  css: "#46a758",
+  html: "#46a758",
+  scss: "#46a758",
+  c: "#888888",
+  h: "#888888",
+  cpp: "#888888",
+  hpp: "#888888",
+  py: "#6b75db",
+  default: "#5a5a5a",
 };
 
-function getObsidianColor(node: FileNode): string {
-  if (node.kind === "dir") return OBSIDIAN_COLORS.dir;
+function getNodeColor(node: FileNode): string {
+  if (node.kind === "dir") return NODE_COLORS.dir;
   const ext =
     node.extension ?? node.path.split(".").pop()?.toLowerCase() ?? "";
-  return OBSIDIAN_COLORS[ext] || OBSIDIAN_COLORS.default;
+  return NODE_COLORS[ext] || NODE_COLORS.default;
 }
 
 function getNodeSize(node: FileNode): number {
@@ -101,7 +103,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
             extension: n.extension,
             size: n.size,
             modified: n.modified,
-            color: getObsidianColor(n),
+            color: getNodeColor(n),
             nodeSize: getNodeSize(n),
           },
         })),
@@ -126,7 +128,6 @@ export function GraphPage({ projectPath }: GraphPageProps) {
               "background-opacity": 0.75,
               width: "data(nodeSize)",
               height: "data(nodeSize)",
-              // Outer glow via text-outline
               "text-outline-color": "data(color)",
               "text-outline-width": 2,
               "text-outline-opacity": 0.35,
@@ -156,7 +157,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
               "z-index": 9999,
             },
           },
-          // Dim non-neighbours
+          // Dim non-neighbours on neighbourhood highlight
           {
             selector: "node.dimmed",
             style: {
@@ -183,7 +184,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
             selector: "edge",
             style: {
               width: 0.4,
-              "line-color": "rgba(255,255,255,0.06)",
+              "line-color": "rgba(255,255,255,0.05)",
               "curve-style": "bezier",
               "target-arrow-shape": "none",
               "z-index": 0,
@@ -200,7 +201,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           {
             selector: "edge.highlighted",
             style: {
-              "line-color": "rgba(255,255,255,0.2)",
+              "line-color": "rgba(255,255,255,0.15)",
               width: 0.6,
               opacity: 1,
             },
@@ -250,7 +251,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           y: pos.y + containerPos.top - 60,
           label: d.label as string,
           path: d.path as string,
-          kind: k === "dir" ? "📁 Directory" : "📄 File",
+          kind: k === "dir" ? "Directory" : "File",
           size: sz,
         });
       });
@@ -329,7 +330,6 @@ export function GraphPage({ projectPath }: GraphPageProps) {
     cyRef.current?.fit(undefined, 50);
   }, []);
 
-  const nodeCount = graph?.nodes.length ?? 0;
   const edgeCount = graph?.edges.length ?? 0;
   const dirCount =
     graph?.nodes.filter((n) => n.kind === "dir").length ?? 0;
@@ -339,30 +339,33 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: "#0f0f0f" }}
+      style={{ background: "var(--co-bg)" }}
     >
-      {/* ── Toolbar ── */}
-      <div className="co-obsidian-toolbar flex items-center justify-between px-4 py-2">
+      {/* ── Toolbar: 40px height ── */}
+      <div className="co-obsidian-toolbar flex items-center justify-between px-4">
+        {/* Left: title + badges */}
         <div className="flex items-center gap-3">
+          <span className="co-obsidian-toolbar-title">Graph</span>
           <span className="co-obsidian-badge">
-            <Circle size={6} fill="#daa520" stroke="none" />
+            <Circle size={6} fill={NODE_COLORS.dir} stroke="none" />
             {dirCount}
           </span>
           <span className="co-obsidian-badge">
-            <Circle size={6} fill="#4a9eff" stroke="none" />
+            <Circle size={6} fill={NODE_COLORS.ts} stroke="none" />
             {fileCount}
           </span>
           <span className="co-obsidian-badge">{edgeCount} edges</span>
           {labelsVisible && (
             <span
               className="co-obsidian-badge"
-              style={{ color: "rgba(255,255,255,0.35)" }}
+              style={{ color: "var(--co-text-muted)" }}
             >
               labels on
             </span>
           )}
         </div>
 
+        {/* Right: icon buttons with tooltips */}
         <div className="flex items-center gap-1">
           <div className="co-obsidian-layout-toggle">
             <button
@@ -431,7 +434,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           />
         )}
 
-        {/* ── Tooltip ── */}
+        {/* ── Tooltip: compact, rounded, translucent black ── */}
         {tooltip.visible && (
           <div
             className="co-obsidian-tooltip"

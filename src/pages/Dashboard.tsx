@@ -1,4 +1,4 @@
-// Dashboard page — Obsidian-inspired co-theme
+// Dashboard page — Linear-inspired co-theme
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,14 +36,14 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
           <Activity size={18} color="var(--co-accent)" />
           <h2
             className="co-section-title"
-            style={{ fontSize: "18px" }}
+            style={{ fontSize: "var(--co-font-size-xl)" }}
           >
             Dashboard
           </h2>
         </div>
       </div>
 
-      {/* Stats cards */}
+      {/* Stats cards — 3-column grid */}
       <div className="co-stat-grid co-stagger">
         {stats.total > 0 || loading ? (
           <>
@@ -66,8 +66,8 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
               color={status?.running ? "green" : "purple"}
               valueStyle={
                 status?.running
-                  ? { color: "var(--co-success)" }
-                  : { color: "var(--co-text-muted)" }
+                  ? { color: "var(--co-success)", fontSize: "14px" }
+                  : { color: "var(--co-text-muted)", fontSize: "14px" }
               }
               trend={status?.running ? "up" : "down"}
             />
@@ -85,7 +85,7 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
       <div className="co-animate-fade-in">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2" style={{ fontSize: "var(--co-font-size-lg)" }}>
               <TrendingUp size={14} color="var(--co-text-muted)" />
               Recent Changes
             </CardTitle>
@@ -180,6 +180,7 @@ function StatCard({
 }
 
 function ChangeRow({ change }: { change: ChangeRecord }) {
+  const kindRowClass = `co-change-row co-change-row-kind-${change.kind}`;
   const kindClass: Record<string, string> = {
     created: "co-badge co-badge-success",
     modified: "co-badge co-badge-default",
@@ -187,7 +188,7 @@ function ChangeRow({ change }: { change: ChangeRecord }) {
   };
 
   return (
-    <div className="co-change-row">
+    <div className={kindRowClass}>
       <span
         className={cn(
           "text-[10px] font-medium shrink-0",

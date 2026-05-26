@@ -1,4 +1,4 @@
-// Timeline page — Obsidian-inspired co-theme with vertical rail
+// Timeline page — Linear-inspired co-theme with vertical rail
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
 
 import { useChanges } from "@/hooks/useObservatory";
@@ -20,7 +20,7 @@ export function TimelinePage({ projectPath }: TimelinePageProps) {
       <div className="p-5 max-w-5xl mx-auto">
         <h2
           className="co-section-title co-animate-fade-in"
-          style={{ fontSize: "18px", marginBottom: "20px" }}
+          style={{ fontSize: "var(--co-font-size-xl)", marginBottom: "20px" }}
         >
           Timeline
         </h2>
@@ -47,7 +47,7 @@ export function TimelinePage({ projectPath }: TimelinePageProps) {
           <Clock size={18} color="var(--co-accent)" />
           <h2
             className="co-section-title"
-            style={{ fontSize: "18px" }}
+            style={{ fontSize: "var(--co-font-size-xl)" }}
           >
             Timeline
           </h2>
@@ -103,14 +103,14 @@ function TimelineEntry({ change }: { change: ChangeRecord }) {
 
   return (
     <div className="co-timeline-entry group">
-      {/* Vertical rail + dot */}
+      {/* Vertical rail + dot (1px line, 6px dot) */}
       <div className="co-timeline-rail" />
 
       {/* Content */}
       <div className="co-timeline-body">
         <div className="co-timeline-file">
           <FileText
-            size={13}
+            size={12}
             color="var(--co-text-dim)"
             className="shrink-0"
           />
@@ -144,17 +144,20 @@ function TimelineEntry({ change }: { change: ChangeRecord }) {
             </span>
           )}
           {change.commitHash && (
-            <span className="inline-flex items-center gap-1 font-mono text-[10px]">
+            <span className="inline-flex items-center gap-1 font-mono" style={{ fontSize: "var(--co-font-size-xs)" }}>
               <Hash size={10} color="var(--co-text-dim)" />
               <span
-                className="px-1.5 py-0.5 rounded text-[9px]"
-                style={{ background: "var(--co-bg-hover)" }}
+                className="px-1.5 py-0.5 rounded"
+                style={{
+                  background: "var(--co-bg-hover)",
+                  fontSize: "9px",
+                }}
               >
                 {change.commitHash.slice(0, 7)}
               </span>
             </span>
           )}
-          <span className="ml-auto">
+          <span className="co-timeline-meta-time">
             {formatTimestamp(change.timestamp)}
           </span>
         </div>

@@ -1,4 +1,4 @@
-// Project selector — Obsidian-inspired co-theme
+// Project selector — Linear-inspired co-theme
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
 
 import { useState } from "react";
@@ -14,7 +14,6 @@ import {
   Sun,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/useTheme";
 import type { ProjectConfig } from "@/lib/types";
 
@@ -58,9 +57,9 @@ export function ProjectSelector({
       style={{ background: "var(--co-bg)" }}
     >
       {/* ════════════════════════════════════════════
-          Left Sidebar
+          Left Sidebar — 190px
           ════════════════════════════════════════════ */}
-      <aside className="co-sidebar co-animate-fade-in-left relative w-[200px] shrink-0 flex flex-col">
+      <aside className="co-sidebar co-animate-fade-in-left relative w-[190px] shrink-0 flex flex-col">
         {/* Branding */}
         <div className="co-sidebar-brand">
           <div className="co-sidebar-brand-icon">
@@ -79,7 +78,7 @@ export function ProjectSelector({
             )}
           >
             {activeNav === "projects" && <span className="co-nav-indicator" />}
-            <FolderOpen size={15} className="shrink-0" />
+            <FolderOpen size={14} className="shrink-0" />
             Projects
           </button>
 
@@ -91,7 +90,7 @@ export function ProjectSelector({
             )}
           >
             {activeNav === "settings" && <span className="co-nav-indicator" />}
-            <Settings size={15} className="shrink-0" />
+            <Settings size={14} className="shrink-0" />
             Settings
           </button>
         </nav>
@@ -116,8 +115,7 @@ export function ProjectSelector({
             <button
               onClick={() => onOpenProject()}
               disabled={isInitializing}
-              className="co-btn-outline"
-              style={{ padding: "6px 14px", fontSize: "12px" }}
+              className="co-project-open-btn"
             >
               {isInitializing ? (
                 <>
@@ -175,7 +173,7 @@ export function ProjectSelector({
                       >
                         <div className="co-project-icon">
                           <FolderOpen
-                            size={16}
+                            size={18}
                             color={
                               hoveredIndex === i
                                 ? "var(--co-accent)"
@@ -250,7 +248,7 @@ export function ProjectSelector({
                       )}
                       style={
                         theme === "dark"
-                          ? { background: "var(--co-primary)" }
+                          ? { background: "var(--co-accent)" }
                           : { background: "transparent" }
                       }
                     >
@@ -267,7 +265,7 @@ export function ProjectSelector({
                       )}
                       style={
                         theme === "light"
-                          ? { background: "var(--co-primary)" }
+                          ? { background: "var(--co-accent)" }
                           : { background: "transparent" }
                       }
                     >

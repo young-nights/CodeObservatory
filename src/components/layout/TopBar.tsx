@@ -1,4 +1,4 @@
-// TopBar component — co-theme design system
+// TopBar component — Linear-inspired co-theme design system
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
 
 import { cn } from "@/lib/utils";
@@ -16,16 +16,16 @@ export function TopBar({ projectName, watcherRunning, children }: TopBarProps) {
       {/* Left: Breadcrumb */}
       <div className="co-topbar-breadcrumb min-w-0">
         {projectName ? (
-          <div className="co-animate-fade-in flex items-center gap-2 text-sm min-w-0">
+          <div className="co-animate-fade-in flex items-center gap-2 min-w-0">
             <FolderOpen
-              size={16}
+              size={14}
               color="var(--co-text-muted)"
               className="shrink-0"
             />
             <span className="font-medium" style={{ color: "var(--co-text-muted)" }}>
               Projects
             </span>
-            <ChevronRight size={14} className="shrink-0" style={{ color: "var(--co-text-dim)" }} />
+            <ChevronRight size={12} className="shrink-0" style={{ color: "var(--co-text-dim)" }} />
             <span className="co-topbar-breadcrumb-current truncate">
               {projectName}
             </span>
@@ -45,11 +45,12 @@ export function TopBar({ projectName, watcherRunning, children }: TopBarProps) {
       {/* Right: Search + Status */}
       <div className="co-topbar-status">
         {/* Search box placeholder */}
-        <div className="hidden sm:flex items-center gap-2 h-8 px-3 rounded-md border text-xs cursor-not-allowed select-none"
+        <div className="hidden sm:flex items-center gap-2 h-7 px-3 rounded-md border text-xs cursor-not-allowed select-none"
           style={{
             background: "var(--co-bg-hover)",
             borderColor: "var(--co-border)",
             color: "var(--co-text-muted)",
+            fontSize: "var(--co-font-size-xs)",
           }}
         >
           <Search size={12} />
