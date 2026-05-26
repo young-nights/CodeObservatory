@@ -12,7 +12,7 @@ import { useScanGraph } from "@/hooks/useObservatory";
 import { useTheme } from "@/hooks/useTheme";
 import { SettingsPanel } from "./SettingsPanel";
 import type { FileNode, FileEdge } from "@/lib/types";
-import { FolderOpen, File, Hash, Clock } from "lucide-react";
+import { FolderOpen, File, Hash, Clock, Maximize2 } from "lucide-react";
 
 // ═══════════ Colors — dual theme ═══════════
 const C = {
@@ -75,6 +75,19 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
   }, [fgRef, strength]);
 }
 
+// ═══════════ Bounding sphere + camera optimization ═══════════
+function computeBounds(data: { nodes: FGNode[] }) {
+  // Compute the bounding sphere of all currently-added nodes
+  // Returns { center, radius } or null if no nodes
+  const ns = data.nodes;
+  if (ns.length === 0) return null;
+  let cx = 0, cy = 0, cz = 0, maxDist = 0;
+  // After force simulation settles, get actual positions from ForceGraph3D
+  // For initial estimate, use node count to approximate
+  const estRadius = Math.max(15, Math.sqrt(ns.length) * 3);
+  return { cx: 0, cy: 0, cz: 0, radius: estRadius };
+}
+
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
 const DEFS: GalaxySettings = { nodeSize:1, edgeOpacity:0.15, bloomStrength:1.5, chargeStrength:-150, linkDistance:20, linkStrength:0.3, centerGravity:0.1 };
@@ -94,6 +107,35 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
   useBloom(fgRef, settings.bloomStrength);
+
+  // ── Dynamic bounds for adaptive camera ──
+  const bounds = useMemo(() => computeBounds(data), [data]);
+  // Camera distance: enough to see the whole galaxy comfortably
+  const camDist = bounds ? bounds.radius * 2.0 : 50;
+  const camPos = useMemo(() => ({ x: 0, y: camDist * 0.3, z: camDist }), [camDist]);
+
+  // Reset view — zoom to fit entire galaxy
+  const handleReset = useCallback(() => {
+    const fg: any = fgRef.current;
+    if (!fg || !bounds) return;
+    const cam = fg.camera();
+    if (!cam) return;
+    // Animate camera to optimal position
+    const target = new THREE.Vector3(0, camDist * 0.3, camDist);
+    const start = cam.position.clone();
+    const startTime = Date.now();
+    const duration = 800;
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      cam.position.lerpVectors(start, target, ease);
+      cam.lookAt(0, 0, 0);
+      fg.zoomToFit?.(400, 50);
+      if (t < 1) requestAnimationFrame(animate);
+    };
+    animate();
+  }, [bounds, camDist]);
 
   useEffect(() => { const onR = () => setDim({ w: window.innerWidth, h: window.innerHeight }); window.addEventListener("resize", onR); return () => window.removeEventListener("resize", onR); }, []);
 
@@ -133,6 +175,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
         <ForceGraph3D ref={fgRef} graphData={data}
           width={dim.w - (fullscreen ? 0 : 200) - (panelOpen ? 280 : 0)} height={dim.h - 48}
           backgroundColor={clr.bg} showNavInfo={false}
+          cameraPosition={camPos}
           nodeThreeObject={nodeObj} nodeVal={(n:any) => (n as FGNode).val}
           linkWidth={0.3} linkColor={() => `rgba(${isDark ? "99,102,241" : "100,116,139"},${settings.edgeOpacity})`}
           linkDirectionalParticles={2} linkDirectionalParticleSpeed={0.003} linkDirectionalParticleWidth={1.2}
@@ -154,7 +197,12 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       <button onClick={()=>setPanelOpen(v=>!v)} className="absolute top-6 right-6 z-30 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: clr.ui.card, border: `1px solid ${clr.ui.border}`, color: clr.ui.dim }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
-      <button onClick={refresh} className="absolute bottom-6 right-6 z-20 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: clr.ui.card, border: `1px solid ${clr.ui.border}`, color: clr.ui.dim }}>
+      <button onClick={handleReset} className="absolute bottom-6 right-16 z-20 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: clr.ui.card, border: `1px solid ${clr.ui.border}`, color: clr.ui.dim }}
+        title="Reset view">
+        <Maximize2 size={14} />
+      </button>
+      <button onClick={refresh} className="absolute bottom-6 right-6 z-20 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: clr.ui.card, border: `1px solid ${clr.ui.border}`, color: clr.ui.dim }}
+        title="Rescan">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
       </button>
       {/* Settings */}
