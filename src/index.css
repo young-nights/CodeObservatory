@@ -809,7 +809,7 @@ html, body, #root {
 
 /* Graph background — no gradient, no texture */
 .co-graph-bg {
-  background: var(--co-bg);
+  background: #0d0d0d;
 }
 
 /* Toolbar — 40px, icon-only, left-aligned */

@@ -1,7 +1,7 @@
 // Graph — 星河图谱 · Precision Instrument core visualization
 // Sigma.js WebGL renderer + solarLayout radial concentric rings
 // Star (Root) → Planet (top dir) → Moon (subdir) → Satellite (file) → Dust (change)
-// OKLCH color space · exponential easing · expand/collapse progressive reveal
+// Hex color space (Sigma WebGL) · exponential easing · expand/collapse progressive reveal
 
 import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import Sigma from "sigma";
@@ -17,54 +17,41 @@ import {
 } from "@/lib/solarLayout";
 import { RefreshCw, Maximize2, Home, ChevronDown, ChevronUp } from "lucide-react";
 
-// ── OKLCH Node Colors ──
+// ── Hex Node Colors (Sigma WebGL requires hex) ──
 const NODE_COLORS = {
-  star: "oklch(75% 0.18 85)",
-  planet: "oklch(63% 0.12 250)",
-  moon: "oklch(58% 0.08 250)",
-  dust: "oklch(70% 0.05 85 / 0.6)",
-  default: "oklch(55% 0.02 260)",
+  star: "#d4a017",       // 金色（恒星）
+  planet: "#5b8def",     // 蓝色（行星/目录）
+  moon: "#7b9cef",       // 淡蓝（卫星/子目录）
+  dust: "#a09060",       // 淡金（尘埃/历史）
+  default: "#8899aa",    // 灰色
 } as const;
 
-// Extension → OKLCH color for file/satellite nodes
+// Extension → hex color for file/satellite nodes (Sigma WebGL requires hex)
 const EXT_COLORS: Record<string, string> = {
-  ts: "oklch(62% 0.16 250)",
-  tsx: "oklch(64% 0.16 250)",
-  js: "oklch(60% 0.14 195)",
-  jsx: "oklch(62% 0.14 195)",
-  rs: "oklch(58% 0.17 20)",
-  md: "oklch(58% 0.11 300)",
-  json: "oklch(65% 0.12 95)",
-  toml: "oklch(65% 0.12 95)",
-  yaml: "oklch(65% 0.12 95)",
-  yml: "oklch(65% 0.12 95)",
-  css: "oklch(58% 0.12 155)",
-  scss: "oklch(58% 0.12 155)",
-  html: "oklch(58% 0.12 30)",
-  py: "oklch(58% 0.1 195)",
-  c: "oklch(55% 0.14 200)",
-  h: "oklch(55% 0.14 200)",
-  cpp: "oklch(55% 0.14 200)",
-  hpp: "oklch(55% 0.14 200)",
-  go: "oklch(55% 0.13 180)",
+  ts: "#5b8def", tsx: "#6b9df0",
+  js: "#56b6c2", jsx: "#66c6d2",
+  rs: "#e07050",         // Rust 橙
+  md: "#b070d0",         // Markdown 紫
+  json: "#d4b040", toml: "#d4b040", yaml: "#d4b040", yml: "#d4b040",
+  css: "#50b070", scss: "#60c080",
+  html: "#d07040",
+  py: "#40b0c0",
+  c: "#8899aa", h: "#8899aa", cpp: "#8899aa", hpp: "#8899aa",
+  go: "#60b0d0",
 };
 
 // ── Node Sizes ──
 const NODE_SIZES = {
-  star: 18,
-  planet: 10,
-  moon: 7,
-  satellite: 5,
-  dust: 3,
+  star: 26,      // 恒星大一点
+  planet: 14,    // 行星
+  moon: 10,      // 子目录
+  satellite: 7,  // 文件
+  dust: 4,       // 历史
 } as const;
 
 // ── Edge orbit colors & thickness ──
-const ORBIT_COLOR = "oklch(100% 0 0 / 0.04)";
-const EDGE_THICKNESS: Record<number, number> = {
-  1: 0.5,   // Star → Planet
-  2: 0.3,   // Planet → Moon / File
-  3: 0.2,   // File → Dust
-};
+const ORBIT_COLOR = "rgba(255,255,255,0.08)";  // 更亮一点
+const EDGE_THICKNESS = [0.8, 0.6, 0.4, 0.3, 0.2];  // 加粗
 
 const LABEL_ZOOM_THRESHOLD = 2.0;
 
