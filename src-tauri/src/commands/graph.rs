@@ -1,9 +1,13 @@
 // Graph building commands: change-history graph + directory scan graph
+// Optimized for large projects (10k+ files) with smart filtering
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-/// A node in the file relationship graph
+// ══════════════════════════════════════════════════
+// Data structures
+// ══════════════════════════════════════════════════
+
 #[derive(serde::Serialize, Clone)]
 pub struct FileNode {
     pub id: String,
@@ -12,27 +16,20 @@ pub struct FileNode {
     #[serde(rename = "changeCount")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change_count: Option<u32>,
-    /// "dir" or "file"; present only in scan_directory results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    /// File extension (without dot); present only in scan_directory results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extension: Option<String>,
-    /// File size in bytes; present only for files in scan_directory results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
-    /// Last modification time as ISO 8601 string; present only in scan_directory results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modified: Option<String>,
-    /// Whether this directory contains children (files or subdirs); computed post-scan
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_children: Option<bool>,
-    /// Whether directory scan was truncated at max_depth
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncated: Option<bool>,
 }
 
-/// An edge between two files in the graph
 #[derive(serde::Serialize)]
 pub struct FileEdge {
     pub id: String,
@@ -44,98 +41,156 @@ pub struct FileEdge {
     pub label: Option<String>,
 }
 
-/// The complete graph data
 #[derive(serde::Serialize)]
 pub struct GraphData {
     pub nodes: Vec<FileNode>,
     pub edges: Vec<FileEdge>,
 }
 
-/// Directories to skip during scanning
+// ══════════════════════════════════════════════════
+// Skip rules — comprehensive
+// ══════════════════════════════════════════════════
+
+/// Directories to always skip (case-sensitive exact match or starts-with-dot)
 const SKIP_DIRS: &[&str] = &[
-    ".observatory",
-    ".git",
-    "node_modules",
-    "target",
-    "dist",
-    "build",
-    "__pycache__",
-    ".vscode",
-    ".idea",
-    ".vs",
-    "obj",
-    "bin",
-    "Debug",
-    "Release",
-    "out",
-    ".next",
-    ".nuxt",
-    "coverage",
-    ".cache",
-    ".tox",
-    "venv",
-    ".venv",
-    "env",
-    ".env",
-    ".pytest_cache",
-    ".mypy_cache",
-    "__MACOSX",
-    "Thumbs.db",
+    ".observatory", ".git", ".hg", ".svn",
+    "node_modules", "bower_components",
+    "target", "dist", "build", "out", "release", "debug",
+    "__pycache__", ".pytest_cache", ".mypy_cache", ".tox", ".nox",
+    ".vscode", ".idea", ".vs", ".fleet",
+    "obj", "bin", "Debug", "Release", "x64", "x86",
+    ".next", ".nuxt", ".output", ".svelte-kit",
+    "coverage", ".nyc_output", ".cache", ".parcel-cache",
+    "venv", ".venv", "env", ".env", "virtualenv",
+    "__MACOSX", ".DS_Store",
+    "tmp", "temp", ".tmp",
+    ".turbo", ".angular", ".astro",
 ];
 
-/// Directory suffixes to skip (e.g., "*.egg-info")
+/// Directory name suffixes to skip
 const SKIP_DIR_SUFFIXES: &[&str] = &[
-    ".egg-info",
+    ".egg-info", ".dist-info",
 ];
 
-/// Filename substrings to skip for files
-const SKIP_FILE_CONTAINS: &[&str] = &[
-    ".min.",   // *.min.js, *.min.css 等压缩版
-];
+/// Hidden file prefixes (starts with . and not in SPECIAL_FILENAMES)
+fn is_hidden(name: &str) -> bool {
+    name.starts_with('.')
+}
 
-/// Filenames to skip even if extension matches
+/// Files to always skip by exact name
 const SKIP_FILENAMES: &[&str] = &[
-    "package-lock.json",
-    "Cargo.lock",
-    "yarn.lock",
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+    "Cargo.lock", "Gemfile.lock", "poetry.lock",
+    "Thumbs.db", ".DS_Store", "desktop.ini",
 ];
 
-/// File extensions we want to track (whitelist — source code + docs)
+/// File substrings that indicate generated/minified content
+const SKIP_FILE_CONTAINS: &[&str] = &[
+    ".min.", ".bundle.", ".chunk.",
+];
+
+/// Source code + documentation extensions (whitelist)
 const TRACKED_EXTENSIONS: &[&str] = &[
-    "ts", "tsx", "js", "jsx", "rs", "py", "c", "cpp", "h", "hpp",
-    "css", "scss", "less", "html", "md", "json", "toml", "yaml", "yml",
-    "java", "go", "rb", "php", "swift", "kt", "kts", "vue", "svelte",
-    "svg", "txt", "xml", "proto", "sql", "graphql", "prisma",
+    // TypeScript/JavaScript
+    "ts", "tsx", "mts", "cts",
+    "js", "jsx", "mjs", "cjs",
+    // Rust
+    "rs",
+    // Python
+    "py", "pyi", "pyx",
+    // C/C++
+    "c", "cc", "cpp", "cxx", "h", "hh", "hpp", "hxx",
+    // Web
+    "css", "scss", "sass", "less", "html", "htm", "svg", "xml",
+    // Config/data
+    "json", "toml", "yaml", "yml",
+    // Documentation
+    "md", "mdx", "rst", "txt",
+    // Other languages
+    "java", "kt", "kts", "swift",
+    "go", "rb", "php", "lua",
+    "vue", "svelte", "astro",
+    "proto", "sql", "graphql", "prisma",
+    "sh", "bash", "zsh", "fish",
+    "nix", "dhall",
+    "dockerfile", "dockerignore",
 ];
 
-/// File extensions to always skip (compiled artifacts, binaries, assets)
+/// Extensions to always skip (binaries, assets, compiled artifacts)
 const SKIP_EXTENSIONS: &[&str] = &[
-    "o", "obj", "exe", "dll", "so", "dylib", "a", "lib", "class",
-    "pyc", "pyd", "wasm", "bin", "elf", "hex", "map", "lock",
-    "png", "jpg", "jpeg", "gif", "ico", "webp", "bmp",
-    "ttf", "woff", "woff2", "eot", "mp3", "mp4", "wav", "ogg",
-    "pdf", "zip", "tar", "gz", "rar", "7z", "dat", "db", "sqlite",
+    // Compiled
+    "o", "obj", "exe", "dll", "so", "dylib", "a", "lib", "class", "jar",
+    "pyc", "pyo", "pyd", "wasm",
+    "bin", "elf", "hex", "out", "gch",
+    // Media
+    "png", "jpg", "jpeg", "gif", "ico", "webp", "bmp", "tiff", "avif",
+    "svg", // SVG is tracked above for code, but here as fallback skip
+    "ttf", "otf", "woff", "woff2", "eot",
+    "mp3", "mp4", "wav", "ogg", "flac", "avi", "mov", "mkv", "webm",
+    // Archives/documents
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+    "zip", "tar", "gz", "bz2", "xz", "rar", "7z", "zst",
+    // Database
+    "db", "sqlite", "sqlite3",
+    // Map files
+    "map",
 ];
 
-/// Special filenames without extensions that we still want to track
+/// Special files without extensions to track
 const SPECIAL_FILENAMES: &[&str] = &[
-    "Dockerfile",
-    "Makefile",
-    "CMakeLists.txt",
-    ".gitignore",
-    ".env.example",
-    ".eslintrc",
-    ".prettierrc",
+    "Dockerfile", "docker-compose.yml", ".dockerignore",
+    "Makefile", "CMakeLists.txt", "BUILD", "WORKSPACE",
+    ".gitignore", ".gitattributes",
+    ".env.example", ".env.sample",
+    ".eslintrc", ".eslintrc.js", ".eslintrc.json",
+    ".prettierrc", ".prettierrc.js", ".prettierrc.json",
     ".editorconfig",
+    "LICENSE", "LICENCE", "COPYING",
+    "README", "CHANGELOG", "CONTRIBUTING",
+    "Procfile", "Dockerfile",
 ];
 
-/// Recursively scan a project directory and build a file/directory relationship graph.
-/// `max_depth` limits directory nesting below project root (default: 4).
-/// Directories beyond max_depth are marked `truncated: true` and not recursed into.
+// ══════════════════════════════════════════════════
+// File filtering logic
+// ══════════════════════════════════════════════════
+
+fn should_track_file(name: &str, ext: &Option<String>) -> bool {
+    // Exact filename skip
+    if SKIP_FILENAMES.contains(&name) {
+        return false;
+    }
+    // Skip minified/bundled
+    for pattern in SKIP_FILE_CONTAINS {
+        if name.contains(pattern) {
+            return false;
+        }
+    }
+    // Special files without extension
+    if SPECIAL_FILENAMES.contains(&name) {
+        return true;
+    }
+    if let Some(e) = ext {
+        let ext_lower = e.to_lowercase();
+        return TRACKED_EXTENSIONS.contains(&ext_lower.as_str());
+    }
+    false
+}
+
+fn should_skip_dir(name: &str) -> bool {
+    if is_hidden(name) { return true; }
+    if SKIP_DIRS.contains(&name) { return true; }
+    SKIP_DIR_SUFFIXES.iter().any(|suffix| name.ends_with(suffix))
+}
+
+// ══════════════════════════════════════════════════
+// Scan command — optimized single-pass walk
+// ══════════════════════════════════════════════════
+
 #[tauri::command]
 pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<GraphData, String> {
-    let max_depth = max_depth.unwrap_or(4);
+    let max_depth = max_depth.unwrap_or(6);
     let root = PathBuf::from(&project_path);
+
     if !root.exists() {
         return Err(format!("Path does not exist: {}", project_path));
     }
@@ -143,16 +198,17 @@ pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<Gr
         return Err(format!("Path is not a directory: {}", project_path));
     }
 
-    let mut nodes: Vec<FileNode> = Vec::new();
-    let mut edges: Vec<FileEdge> = Vec::new();
-    let mut edge_idx: u32 = 0;
-
-    // Add root node
     let root_label = root
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| project_path.clone());
-    let root_modified = get_modified_iso(&root);
+
+    // Pre-allocate for large projects
+    let mut nodes: Vec<FileNode> = Vec::with_capacity(4096);
+    let mut edges: Vec<FileEdge> = Vec::with_capacity(4096);
+    let mut edge_idx: u32 = 0;
+
+    // Root node
     nodes.push(FileNode {
         id: project_path.clone(),
         label: root_label.clone(),
@@ -161,117 +217,71 @@ pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<Gr
         kind: Some("dir".to_string()),
         extension: None,
         size: None,
-        modified: root_modified,
+        modified: get_modified(&root),
         has_children: None,
         truncated: None,
     });
 
-    walk_dir(&root, &project_path, &project_path, &mut nodes, &mut edges, &mut edge_idx, 0, max_depth)
-        .map_err(|e| format!("Failed to scan directory: {}", e))?;
+    walk(&root, &project_path, 0, max_depth, &mut nodes, &mut edges, &mut edge_idx)
+        .map_err(|e| format!("Scan error: {}", e))?;
 
-    // Post-processing: mark directories that have children
-    let mut has_kids: HashMap<String, bool> = HashMap::new();
-    for edge in &edges {
-        has_kids.insert(edge.source.clone(), true);
+    // Post: mark dirs with children
+    let mut has_kids: HashMap<String, bool> = HashMap::with_capacity(edges.len());
+    for e in &edges {
+        has_kids.insert(e.source.clone(), true);
     }
-    for node in &mut nodes {
-        if node.kind.as_deref() == Some("dir") {
-            node.has_children = Some(has_kids.contains_key(&node.id));
+    for n in &mut nodes {
+        if n.kind.as_deref() == Some("dir") {
+            n.has_children = Some(has_kids.contains_key(&n.id));
         }
     }
 
     Ok(GraphData { nodes, edges })
 }
 
-/// Determine whether a file should be included in the graph based on its extension
-/// and special filenames (whitelist approach — only source code + docs).
-fn should_track_file(name: &str, ext: &Option<String>) -> bool {
-    // Skip files with known skip substrings (e.g., *.min.js, *.min.css)
-    for pattern in SKIP_FILE_CONTAINS {
-        if name.contains(pattern) {
-            return false;
-        }
-    }
-
-    // Skip known lock/config files
-    if SKIP_FILENAMES.contains(&name) {
-        return false;
-    }
-
-    // Special filenames without extensions (e.g. Dockerfile, Makefile, .gitignore)
-    if SPECIAL_FILENAMES.contains(&name) {
-        return true;
-    }
-
-    // If the file has an extension:
-    if let Some(e) = ext {
-        let ext_lower = e.to_lowercase();
-        // Blacklist is an extra safety net: explicitly skip compiled artifacts
-        if SKIP_EXTENSIONS.contains(&ext_lower.as_str()) {
-            return false;
-        }
-        // Whitelist: only track known source/doc extensions
-        return TRACKED_EXTENSIONS.contains(&ext_lower.as_str());
-    }
-
-    // Files without extensions that aren't in SPECIAL_FILENAMES → skip
-    false
-}
-
-/// Recursively walk a directory, collecting nodes and edges.
-/// `depth` is the current nesting level (root = 0).
-/// Directories at `depth >= max_depth` are marked truncated and not recursed into.
-fn walk_dir(
+/// Single-pass recursive walk
+fn walk(
     dir: &PathBuf,
-    root_prefix: &str,
     parent_id: &str,
+    depth: u32,
+    max_depth: u32,
     nodes: &mut Vec<FileNode>,
     edges: &mut Vec<FileEdge>,
     edge_idx: &mut u32,
-    depth: u32,
-    max_depth: u32,
 ) -> std::io::Result<()> {
-    let entries = std::fs::read_dir(dir)?;
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(()), // Permission denied → skip silently
+    };
 
-    for entry in entries {
-        let entry = entry?;
-        let file_name = entry.file_name();
-        let name_str = file_name.to_string_lossy().to_string();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let path = entry.path();
+        let is_dir = match entry.file_type() {
+            Ok(ft) => ft.is_dir(),
+            Err(_) => continue,
+        };
 
-        let file_type = entry.file_type()?;
-        let full_path = entry.path();
+        if is_dir {
+            if should_skip_dir(&name) { continue; }
 
-        if file_type.is_dir() {
-            // Skip known noise directories (includes dot-prefixed like .git, .vscode)
-            if SKIP_DIRS.contains(&name_str.as_str()) || name_str.starts_with('.') {
-                continue;
-            }
-            // Skip directories with known suffixes (e.g., *.egg-info)
-            let skip_by_suffix = SKIP_DIR_SUFFIXES.iter().any(|suffix| name_str.ends_with(suffix));
-            if skip_by_suffix {
-                continue;
-            }
-
-            let dir_id = full_path.to_string_lossy().to_string();
-            let modified = get_modified_iso(&full_path);
-
+            let dir_id = path.to_string_lossy().to_string();
             let truncated = depth >= max_depth;
 
             nodes.push(FileNode {
                 id: dir_id.clone(),
-                label: name_str.clone(),
+                label: name.clone(),
                 path: dir_id.clone(),
                 change_count: None,
                 kind: Some("dir".to_string()),
                 extension: None,
                 size: None,
-                modified,
+                modified: get_modified(&path),
                 has_children: None,
                 truncated: Some(truncated),
             });
-
             edges.push(FileEdge {
-                id: format!("e{}", edge_idx),
+                id: format!("e{edge_idx}"),
                 source: parent_id.to_string(),
                 target: dir_id.clone(),
                 weight: None,
@@ -279,39 +289,30 @@ fn walk_dir(
             });
             *edge_idx += 1;
 
-            // Recurse into subdirectory only if not at max depth
             if !truncated {
-                walk_dir(&full_path, root_prefix, &dir_id, nodes, edges, edge_idx, depth + 1, max_depth)?;
+                walk(&path, &dir_id, depth + 1, max_depth, nodes, edges, edge_idx)?;
             }
-        } else if file_type.is_file() {
-            let ext = full_path
-                .extension()
-                .map(|e| e.to_string_lossy().to_string());
+        } else {
+            let ext = path.extension().map(|e| e.to_string_lossy().to_string());
+            if !should_track_file(&name, &ext) { continue; }
 
-            // Filter: only track source-code / documentation files
-            if !should_track_file(&name_str, &ext) {
-                continue;
-            }
-
-            let file_id = full_path.to_string_lossy().to_string();
             let size = entry.metadata().ok().map(|m| m.len());
-            let modified = get_modified_iso(&full_path);
+            let file_id = path.to_string_lossy().to_string();
 
             nodes.push(FileNode {
                 id: file_id.clone(),
-                label: name_str.clone(),
+                label: name.clone(),
                 path: file_id.clone(),
                 change_count: None,
                 kind: Some("file".to_string()),
                 extension: ext,
                 size,
-                modified,
+                modified: get_modified(&path),
                 has_children: None,
                 truncated: None,
             });
-
             edges.push(FileEdge {
-                id: format!("e{}", edge_idx),
+                id: format!("e{edge_idx}"),
                 source: parent_id.to_string(),
                 target: file_id,
                 weight: None,
@@ -320,12 +321,10 @@ fn walk_dir(
             *edge_idx += 1;
         }
     }
-
     Ok(())
 }
 
-/// Get the last-modified time of a path as an ISO 8601 string.
-fn get_modified_iso(path: &PathBuf) -> Option<String> {
+fn get_modified(path: &PathBuf) -> Option<String> {
     path.metadata()
         .ok()
         .and_then(|m| m.modified().ok())
@@ -335,129 +334,80 @@ fn get_modified_iso(path: &PathBuf) -> Option<String> {
         })
 }
 
-/// Build a file relationship graph from the change history.
-/// Files that change together (within the same time window) are connected.
+// ══════════════════════════════════════════════════
+// Build graph from change history (unchanged logic)
+// ══════════════════════════════════════════════════
+
 #[tauri::command]
 pub fn build_graph(project_path: String) -> Result<GraphData, String> {
-    let db_path = PathBuf::from(&project_path)
-        .join(".observatory")
-        .join("db.sqlite");
-
+    let db_path = PathBuf::from(&project_path).join(".observatory").join("db.sqlite");
     if !db_path.exists() {
-        return Ok(GraphData {
-            nodes: vec![],
-            edges: vec![],
-        });
+        return Ok(GraphData { nodes: vec![], edges: vec![] });
     }
 
     let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open database: {}", e))?;
+        .map_err(|e| format!("DB open failed: {e}"))?;
 
-    // Get all file paths and their change counts
-    let mut stmt = conn
-        .prepare(
-            "SELECT relative_path, COUNT(*) as cnt
-             FROM changes
-             GROUP BY relative_path
-             ORDER BY cnt DESC",
-        )
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
+    let mut stmt = conn.prepare(
+        "SELECT relative_path, COUNT(*) as cnt FROM changes GROUP BY relative_path ORDER BY cnt DESC"
+    ).map_err(|e| format!("Query failed: {e}"))?;
 
     let file_stats: Vec<(String, u32)> = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
-        })
-        .map_err(|e| format!("Failed to query: {}", e))?
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?)))
+        .map_err(|e| format!("Query failed: {e}"))?
         .filter_map(|r| r.ok())
         .collect();
 
-    // Build nodes
-    let mut nodes: Vec<FileNode> = Vec::new();
-    let mut path_to_id: HashMap<String, String> = HashMap::new();
+    let mut nodes: Vec<FileNode> = Vec::with_capacity(file_stats.len());
+    let mut path_to_id: HashMap<String, String> = HashMap::with_capacity(file_stats.len());
 
     for (i, (path, count)) in file_stats.iter().enumerate() {
-        let node_id = format!("n{}", i);
-        let label = path.split('/').last().unwrap_or(path).to_string();
-        path_to_id.insert(path.clone(), node_id.clone());
+        let id = format!("n{i}");
+        let label = path.rsplit('/').next().unwrap_or(path).to_string();
+        path_to_id.insert(path.clone(), id.clone());
         nodes.push(FileNode {
-            id: node_id,
-            label,
-            path: path.clone(),
+            id, label, path: path.clone(),
             change_count: Some(*count),
-            kind: None,
-            extension: None,
-            size: None,
-            modified: None,
-            has_children: None,
-            truncated: None,
+            kind: None, extension: None, size: None, modified: None,
+            has_children: None, truncated: None,
         });
     }
 
-    // Build edges: connect files that changed near each other in time
-    // We use a simple heuristic: files changed within 5 minutes of each other
-    // are considered "related"
-    let mut stmt2 = conn
-        .prepare(
-            "SELECT relative_path, timestamp FROM changes ORDER BY timestamp ASC",
-        )
-        .map_err(|e| format!("Failed to prepare query: {}", e))?;
+    let mut stmt2 = conn.prepare(
+        "SELECT relative_path, timestamp FROM changes ORDER BY timestamp ASC"
+    ).map_err(|e| format!("Query failed: {e}"))?;
 
-    let timed_changes: Vec<(String, String)> = stmt2
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(|e| format!("Failed to query: {}", e))?
+    let timed: Vec<(String, String)> = stmt2
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+        .map_err(|e| format!("Query failed: {e}"))?
         .filter_map(|r| r.ok())
         .collect();
 
-    // Group changes by time windows (5-minute buckets)
+    let window_secs = 300;
     let mut edge_weights: HashMap<(String, String), u32> = HashMap::new();
-    let window_secs = 300; // 5 minutes
 
-    for i in 0..timed_changes.len() {
-        let (path_a, ts_a) = &timed_changes[i];
-        let t_a = chrono::DateTime::parse_from_rfc3339(ts_a)
-            .unwrap_or_default();
-
-        for j in (i + 1)..timed_changes.len() {
-            let (path_b, ts_b) = &timed_changes[j];
-            if path_a == path_b {
-                continue;
-            }
-
-            let t_b = chrono::DateTime::parse_from_rfc3339(ts_b)
-                .unwrap_or_default();
-            let diff = (t_b - t_a).num_seconds().abs();
-
-            if diff > window_secs {
-                break; // changes are ordered, so if we exceed window, remaining will too
-            }
-
-            let id_a = path_to_id.get(path_a);
-            let id_b = path_to_id.get(path_b);
-            if let (Some(a), Some(b)) = (id_a, id_b) {
-                let key = if a < b {
-                    (a.clone(), b.clone())
-                } else {
-                    (b.clone(), a.clone())
-                };
+    for i in 0..timed.len() {
+        let (pa, ta) = &timed[i];
+        let t_a = chrono::DateTime::parse_from_rfc3339(ta).unwrap_or_default();
+        for j in (i + 1)..timed.len() {
+            let (pb, tb) = &timed[j];
+            if pa == pb { continue; }
+            let t_b = chrono::DateTime::parse_from_rfc3339(tb).unwrap_or_default();
+            if (t_b - t_a).num_seconds().abs() > window_secs { break; }
+            if let (Some(a), Some(b)) = (path_to_id.get(pa), path_to_id.get(pb)) {
+                let key = if a < b { (a.clone(), b.clone()) } else { (b.clone(), a.clone()) };
                 *edge_weights.entry(key).or_insert(0) += 1;
             }
         }
     }
 
-    // Convert edge weights to edges
-    let mut edges: Vec<FileEdge> = Vec::new();
-    let mut edge_idx = 0;
-    for ((source, target), weight) in &edge_weights {
+    let mut edges: Vec<FileEdge> = Vec::with_capacity(edge_weights.len());
+    for (idx, ((s, t), w)) in edge_weights.iter().enumerate() {
         edges.push(FileEdge {
-            id: format!("e{}", edge_idx),
-            source: source.clone(),
-            target: target.clone(),
-            weight: Some(*weight),
-            label: Some(format!("{} co-changes", weight)),
+            id: format!("e{idx}"),
+            source: s.clone(), target: t.clone(),
+            weight: Some(*w), label: Some(format!("{w} co-changes")),
         });
-        edge_idx += 1;
     }
 
     Ok(GraphData { nodes, edges })
