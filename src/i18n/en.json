@@ -31,6 +31,7 @@
     "nodeSize": "Node Size",
     "edgeOpacity": "Edge Opacity",
     "bloom": "Bloom",
+    "forceDynamics": "Force Dynamics",
     "charge": "Charge",
     "linkDistance": "Link Distance",
     "linkStrength": "Link Strength",

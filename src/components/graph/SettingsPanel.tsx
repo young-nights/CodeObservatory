@@ -11,9 +11,10 @@ import {
   ChevronRight,
   RotateCcw,
   Sparkles,
-  SlidersHorizontal,
   Gauge,
   Ellipsis,
+  Zap,
+  Globe,
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════
@@ -34,6 +35,7 @@ interface Props {
   onClose: () => void;
   settings: GalaxySettings;
   onChange: (s: GalaxySettings) => void;
+  layoutMode?: "sphere" | "force";
 }
 
 const DEFAULTS: GalaxySettings = {
@@ -157,7 +159,7 @@ function AccordionGroup({
 // Main Component
 // ══════════════════════════════════════════════════
 
-export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
+export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = "sphere" }: Props) {
   const { t } = useTranslation();
   const { theme: currentTheme } = useTheme();
   const isDark = currentTheme === "dark";
@@ -269,51 +271,67 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                     />
                   </AccordionGroup>
 
-                  {/* ── Force ── */}
-                  <AccordionGroup title={t("settings.force")} icon={SlidersHorizontal} isDark={isDark}>
-                    <SliderControl
-                      label={t("settings.charge")}
-                      value={settings.chargeStrength}
-                      min={-500}
-                      max={-10}
-                      step={10}
-                      onChange={(v) => set("chargeStrength", v)}
-                      isDark={isDark}
-                    />
-                    <SliderControl
-                      label={t("settings.linkDistance")}
-                      value={settings.linkDistance}
-                      min={5}
-                      max={80}
-                      step={1}
-                      onChange={(v) => set("linkDistance", v)}
-                      unit="px"
-                      isDark={isDark}
-                    />
-                    <SliderControl
-                      label={t("settings.linkStrength")}
-                      value={settings.linkStrength}
-                      min={0.05}
-                      max={1}
-                      step={0.05}
-                      onChange={(v) => set("linkStrength", v)}
-                      isDark={isDark}
-                    />
-                    <SliderControl
-                      label={t("settings.centerGravity")}
-                      value={settings.centerGravity}
-                      min={0.01}
-                      max={0.5}
-                      step={0.01}
-                      onChange={(v) => set("centerGravity", v)}
-                      isDark={isDark}
-                    />
-                  </AccordionGroup>
+                  {/* ── Force Dynamics (only in force mode) ── */}
+                  {layoutMode === "force" && (
+                    <AccordionGroup title={t("settings.forceDynamics")} icon={Zap} defaultOpen={true} isDark={isDark}>
+                      <div className="text-xs leading-relaxed mb-3" style={{ color: textMuted }}>
+                        <p>Adjust d3-force-3d simulation parameters. Changes are applied instantly.</p>
+                      </div>
+                      <SliderControl
+                        label={t("settings.charge")}
+                        value={settings.chargeStrength}
+                        min={-1000}
+                        max={0}
+                        step={10}
+                        onChange={(v) => set("chargeStrength", v)}
+                        isDark={isDark}
+                      />
+                      <SliderControl
+                        label={t("settings.linkDistance")}
+                        value={settings.linkDistance}
+                        min={5}
+                        max={200}
+                        step={5}
+                        onChange={(v) => set("linkDistance", v)}
+                        isDark={isDark}
+                      />
+                      <SliderControl
+                        label={t("settings.linkStrength")}
+                        value={settings.linkStrength}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        onChange={(v) => set("linkStrength", v)}
+                        isDark={isDark}
+                      />
+                      <SliderControl
+                        label={t("settings.centerGravity")}
+                        value={settings.centerGravity}
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        onChange={(v) => set("centerGravity", v)}
+                        isDark={isDark}
+                      />
+                    </AccordionGroup>
+                  )}
+
+                  {/* ── Layout mode indicator ── */}
+                  <div className="flex items-center gap-2 py-2 px-1 mb-1">
+                    {layoutMode === "sphere" ? (
+                      <Globe size={12} style={{ color: accentColor }} />
+                    ) : (
+                      <Zap size={12} style={{ color: accentColor }} />
+                    )}
+                    <span className="text-xs font-medium" style={{ color: textSecondary }}>
+                      {layoutMode === "sphere" ? "Sphere Mode · Fibonacci" : "Force Mode · d3-force-3d"}
+                    </span>
+                  </div>
 
                   {/* ── Other ── */}
                   <AccordionGroup title={t("settings.other")} icon={Ellipsis} isDark={isDark}>
                     <div className="text-xs leading-relaxed" style={{ color: textMuted }}>
-                      <p className="mb-2">Drag nodes to reposition them in the galaxy.</p>
+                      <p className="mb-2">Use the bottom bar to switch between Sphere and Force layout modes.</p>
                       <p className="mb-2">Scroll to zoom in/out of the cosmic view.</p>
                       <p>Click any star to inspect its details.</p>
                     </div>

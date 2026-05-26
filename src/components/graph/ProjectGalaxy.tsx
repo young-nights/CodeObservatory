@@ -365,6 +365,72 @@ function computeSphericalLayout(
 }
 
 // ══════════════════════════════════════════════════════════
+// FORCE LAYOUT COMPUTATION (d3-force-3d)
+// ══════════════════════════════════════════════════════════
+function computeForceLayout(
+  initial: ReturnType<typeof computeSphericalLayout>,
+  settings: GalaxySettings,
+): ReturnType<typeof computeSphericalLayout> {
+  if (initial.nodes.length <= 1) return initial;
+
+  // Build force-simulation nodes from initial positions
+  const forceNodes = initial.nodes.map((n) => ({
+    x: n.x,
+    y: n.y,
+    z: n.z,
+    fx: n.type === "root" ? 0 : (undefined as number | undefined),
+    fy: n.type === "root" ? 0 : (undefined as number | undefined),
+    fz: n.type === "root" ? 0 : (undefined as number | undefined),
+  }));
+
+  // Build link references by node id → array index
+  const idToIdx = new Map(initial.nodes.map((n, i) => [n.id, i]));
+  const forceLinks = initial.edges
+    .filter((e) => idToIdx.has(e.from.id) && idToIdx.has(e.to.id))
+    .map((e) => ({
+      source: idToIdx.get(e.from.id)!,
+      target: idToIdx.get(e.to.id)!,
+    }));
+
+  if (forceLinks.length > 0) {
+    const sim = forceSimulation(forceNodes, 3)
+      .force("charge", forceManyBody().strength(settings.chargeStrength))
+      .force(
+        "link",
+        forceLink(forceLinks)
+          .distance(settings.linkDistance)
+          .strength(settings.linkStrength),
+      )
+      .force(
+        "center",
+        forceCenter(0, 0, 0).strength(settings.centerGravity),
+      )
+      .stop();
+
+    // Run 300 ticks synchronously (instant layout)
+    for (let i = 0; i < 300; i++) sim.tick();
+  }
+
+  // Copy force-sim positions back onto new SphericalNode objects
+  const resultNodes: SphericalNode[] = initial.nodes.map((n, i) => ({
+    ...n,
+    x: forceNodes[i].x,
+    y: forceNodes[i].y,
+    z: forceNodes[i].z,
+  }));
+
+  // Rebuild edges so they reference the new node objects
+  const nodeMap = new Map(resultNodes.map((n) => [n.id, n]));
+  const resultEdges: SphericalEdge[] = initial.edges.map((e) => ({
+    ...e,
+    from: nodeMap.get(e.from.id)!,
+    to: nodeMap.get(e.to.id)!,
+  }));
+
+  return { nodes: resultNodes, edges: resultEdges };
+}
+
+// ══════════════════════════════════════════════════════════
 // SCENE (inside Canvas)
 // ══════════════════════════════════════════════════════════
 interface SceneProps {
@@ -716,6 +782,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<"sphere" | "force">("sphere");
   const [settings, setSettings] = useState<GalaxySettings>(DEFS);
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
@@ -736,76 +803,15 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // Compute spherical layout + d3-force-3d simulation from graph
+  // Compute layout (sphere or force) from graph
   const layout = useMemo(() => {
     if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-
     const initial = computeSphericalLayout(graph.nodes, graph.edges, isDark);
-    if (initial.nodes.length <= 1) return initial;
-
-    // Build force-simulation nodes from initial Fibonacci-sphere positions
-    const forceNodes = initial.nodes.map((n) => ({
-      x: n.x,
-      y: n.y,
-      z: n.z,
-      fx: n.type === "root" ? 0 : (undefined as number | undefined),
-      fy: n.type === "root" ? 0 : (undefined as number | undefined),
-      fz: n.type === "root" ? 0 : (undefined as number | undefined),
-    }));
-
-    // Build link references by node id → array index
-    const idToIdx = new Map(initial.nodes.map((n, i) => [n.id, i]));
-    const forceLinks = initial.edges
-      .filter((e) => idToIdx.has(e.from.id) && idToIdx.has(e.to.id))
-      .map((e) => ({
-        source: idToIdx.get(e.from.id)!,
-        target: idToIdx.get(e.to.id)!,
-      }));
-
-    if (forceLinks.length > 0) {
-      const sim = forceSimulation(forceNodes, 3)
-        .force("charge", forceManyBody().strength(settings.chargeStrength))
-        .force(
-          "link",
-          forceLink(forceLinks)
-            .distance(settings.linkDistance)
-            .strength(settings.linkStrength),
-        )
-        .force(
-          "center",
-          forceCenter(0, 0, 0).strength(settings.centerGravity),
-        )
-        .stop();
-
-      // Run 300 ticks synchronously (no animation — instant layout)
-      for (let i = 0; i < 300; i++) sim.tick();
+    if (layoutMode === "force") {
+      return computeForceLayout(initial, settings);
     }
-
-    // Copy force-sim positions back onto new SphericalNode objects
-    const resultNodes: SphericalNode[] = initial.nodes.map((n, i) => ({
-      ...n,
-      x: forceNodes[i].x,
-      y: forceNodes[i].y,
-      z: forceNodes[i].z,
-    }));
-
-    // Rebuild edges so they reference the new node objects
-    const nodeMap = new Map(resultNodes.map((n) => [n.id, n]));
-    const resultEdges: SphericalEdge[] = initial.edges.map((e) => ({
-      ...e,
-      from: nodeMap.get(e.from.id)!,
-      to: nodeMap.get(e.to.id)!,
-    }));
-
-    return { nodes: resultNodes, edges: resultEdges };
-  }, [
-    graph,
-    isDark,
-    settings.chargeStrength,
-    settings.linkDistance,
-    settings.linkStrength,
-    settings.centerGravity,
-  ]);
+    return initial;
+  }, [graph, isDark, layoutMode, settings]);
 
   // Selected node data
   const selectedNode = useMemo(
@@ -933,6 +939,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
         onClose={() => setPanelOpen(false)}
         settings={settings}
         onChange={setSettings}
+        layoutMode={layoutMode}
       />
 
       {/* ── Selected node info card ── */}
@@ -982,6 +989,45 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           </div>
         </div>
       )}
+
+      {/* ── Layout mode toggle (bottom center) ── */}
+      <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-20 pointer-events-none z-20">
+        <div
+          className="flex gap-1 rounded-lg p-1 pointer-events-auto"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <button
+            onClick={() => setLayoutMode("sphere")}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              background: layoutMode === "sphere" ? "#06b6d4" : "transparent",
+              color: layoutMode === "sphere" ? "#fff" : "#888",
+            }}
+          >
+            Sphere
+          </button>
+          <button
+            onClick={() => setLayoutMode("force")}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 6,
+              border: "none",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 600,
+              background: layoutMode === "force" ? "#06b6d4" : "transparent",
+              color: layoutMode === "force" ? "#fff" : "#888",
+            }}
+          >
+            Force
+          </button>
+        </div>
+      </div>
 
       {/* ── HUD overlay (bottom bar) ── */}
       <div
