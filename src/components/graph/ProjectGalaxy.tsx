@@ -1,8 +1,8 @@
-// ProjectGalaxy — Hierarchical Radial Arc Galaxy (R3F)
-// Layout: RootStar → Planets(dirs) → StarPoints(files) → DustPoints(leaves)
-// Arc edges (QuadraticBezierCurve3) + InstancedMesh + Points + Bloom
+// ProjectGalaxy — 3D Spherical Particle Galaxy (R3F)
+// Layout: RootStar → InstancedMesh(dirs) → Points(files) → Points(dust)
+// Bezier arc edges + InstancedMesh + Points + Bloom
 // Full dark/light theme support via useTheme()
-// Clean architecture: no GodRays, no RibbonArcs, no FlowParticles, no Bokeh, no PointLight
+// Uses Fibonacci sphere for uniform spherical distribution
 
 import { useRef, useCallback, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
@@ -22,6 +22,7 @@ import { FolderOpen, File, Hash, Clock } from "lucide-react";
 const DARK = {
   root: "#e0f0ff",
   rootEmissive: 8,
+  rootHalo: ["#80b0ff", "#c4b5fd", "#e879f9"] as const,
   dir1: "#67e8f9",
   dir2: "#e879f9",
   edgeRoot: "#6366f1",
@@ -47,6 +48,7 @@ const DARK = {
 const LIGHT = {
   root: "#1e1b4b",
   rootEmissive: 3,
+  rootHalo: ["#6366f1", "#7c3aed", "#a78bfa"] as const,
   dir1: "#0284c8",
   dir2: "#7c3aed",
   edgeRoot: "#64748b",
@@ -70,16 +72,14 @@ const LIGHT = {
 };
 
 // ══════════════════════════════════════════════════════════
-// RADIAL LAYOUT TYPES
+// SPHERICAL LAYOUT TYPES
 // ══════════════════════════════════════════════════════════
-interface RadialNode {
+interface SphericalNode {
   id: string;
   name: string;
   path: string;
   type: "root" | "planet" | "star" | "dust";
   color: string;
-  radius: number;
-  angle: number;
   x: number;
   y: number;
   z: number;
@@ -88,25 +88,72 @@ interface RadialNode {
   depth: number;
 }
 
-interface RadialEdge {
-  from: RadialNode;
-  to: RadialNode;
+interface SphericalEdge {
+  from: SphericalNode;
+  to: SphericalNode;
   color: string;
 }
 
 // ══════════════════════════════════════════════════════════
-// RING CONFIG
+// SHELL CONFIG
 // ══════════════════════════════════════════════════════════
-const RING = { planet: 70, star: 140, dust: 210 };
+const SHELL = {
+  dir1Inner: 50,
+  dir1Outer: 70,
+  dir2Inner: 90,
+  dir2Outer: 120,
+  fileInner: 140,
+  fileOuter: 180,
+  dustMin: 200,
+  dustMax: 280,
+};
 
 // ══════════════════════════════════════════════════════════
-// LAYOUT COMPUTATION
+// FIBONACCI SPHERE
 // ══════════════════════════════════════════════════════════
-function computeRadialLayout(
+function fibonacciSphere(
+  n: number,
+  radius: number,
+  center: [number, number, number] = [0, 0, 0],
+): [number, number, number][] {
+  const points: [number, number, number][] = [];
+  const phi = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - (i / Math.max(n - 1, 1)) * 2;
+    const r = Math.sqrt(1 - y * y);
+    const theta = phi * i;
+    points.push([
+      center[0] + radius * r * Math.cos(theta),
+      center[1] + radius * y,
+      center[2] + radius * r * Math.sin(theta),
+    ]);
+  }
+  return points;
+}
+
+// ══════════════════════════════════════════════════════════
+// RANDOM ON SPHERE
+// ══════════════════════════════════════════════════════════
+function randomOnSphere(radius: number, center: [number, number, number] = [0, 0, 0]): [number, number, number] {
+  const u = Math.random();
+  const v = Math.random();
+  const theta = 2 * Math.PI * u;
+  const phi = Math.acos(2 * v - 1);
+  return [
+    center[0] + radius * Math.sin(phi) * Math.cos(theta),
+    center[1] + radius * Math.sin(phi) * Math.sin(theta),
+    center[2] + radius * Math.cos(phi),
+  ];
+}
+
+// ══════════════════════════════════════════════════════════
+// SPHERICAL LAYOUT COMPUTATION
+// ══════════════════════════════════════════════════════════
+function computeSphericalLayout(
   nodes: FileNode[],
   edges: FileEdge[],
   isDark: boolean,
-): { nodes: RadialNode[]; edges: RadialEdge[] } {
+): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
   const clr = isDark ? DARK : LIGHT;
 
   // Find root (node with no incoming edges)
@@ -145,116 +192,168 @@ function computeRadialLayout(
     }
   }
 
-  const radialNodes = new Map<string, RadialNode>();
-  const resultNodes: RadialNode[] = [];
+  const sphericalNodes = new Map<string, SphericalNode>();
+  const resultNodes: SphericalNode[] = [];
 
-  // Ring 0: root at (0,0,0)
-  const rootRN: RadialNode = {
+  // Shell 0: root at (0, 0, 0)
+  const rootSN: SphericalNode = {
     id: root.id,
     name: root.label,
     path: root.path,
     type: "root",
     color: clr.root,
-    radius: 0,
-    angle: 0,
     x: 0, y: 0, z: 0,
     depth: 0,
   };
-  radialNodes.set(root.id, rootRN);
-  resultNodes.push(rootRN);
+  sphericalNodes.set(root.id, rootSN);
+  resultNodes.push(rootSN);
 
-  // Ring 1: depth-1 dirs, r=70, evenly spaced angles, Z ±3
+  // Shell 1: depth-1 dirs, Fibonacci sphere at varying radii (50-70)
   const depth1 = nodesByDepth.get(1) || [];
-  const d1n = depth1.length || 1;
-  depth1.forEach((node, i) => {
-    const angle = (i / d1n) * Math.PI * 2;
-    const z = (Math.random() - 0.5) * 6; // ±3
-    const rn: RadialNode = {
-      id: node.id, name: node.label, path: node.path,
-      type: "planet",
-      color: i % 2 === 0 ? clr.dir1 : clr.dir2,
-      radius: RING.planet, angle,
-      x: Math.cos(angle) * RING.planet,
-      y: z,
-      z: Math.sin(angle) * RING.planet,
-      depth: 1,
-    };
-    radialNodes.set(node.id, rn);
-    resultNodes.push(rn);
-  });
-
-  // Ring 2: files, r=140, in parent's angular sector ±25°, Z ±3, jitter ±3
-  const depth2 = nodesByDepth.get(2) || [];
-  const depth2ByParent = new Map<string, FileNode[]>();
-  for (const n of depth2) {
-    const p = parentMap.get(n.id);
-    if (p) {
-      const list = depth2ByParent.get(p) || [];
-      list.push(n);
-      depth2ByParent.set(p, list);
-    }
-  }
-
-  const SECTOR_HALF = 0.436; // 25°
-  for (const [parentId, childNodes] of depth2ByParent) {
-    const parentRN = radialNodes.get(parentId);
-    if (!parentRN) continue;
-    const pa = parentRN.angle;
-    const count = childNodes.length || 1;
-    const sectorStart = pa - SECTOR_HALF;
-    const sectorRange = SECTOR_HALF * 2;
-
-    childNodes.forEach((node, i) => {
-      const angle = count === 1
-        ? pa
-        : sectorStart + (i / (count - 1)) * sectorRange;
-      const jitter = 6; // ±3px
-      const z = (Math.random() - 0.5) * 6; // ±3
-      const ext = (node.extension || "").toLowerCase();
-      const rn: RadialNode = {
+  const d1Count = depth1.length || 1;
+  if (depth1.length > 0) {
+    const shell1Radius = SHELL.dir1Inner + Math.random() * (SHELL.dir1Outer - SHELL.dir1Inner);
+    const fiboPoints = fibonacciSphere(d1Count, shell1Radius);
+    depth1.forEach((node, i) => {
+      const [x, y, z] = fiboPoints[i % fiboPoints.length];
+      const jitterZ = (Math.random() - 0.5) * 20;
+      const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
-        type: "star",
-        color: clr.file[ext] || clr.defaultFile,
-        radius: RING.star, angle,
-        x: Math.cos(angle) * RING.star + (Math.random() - 0.5) * jitter,
-        y: z,
-        z: Math.sin(angle) * RING.star + (Math.random() - 0.5) * jitter,
-        extension: node.extension, size: node.size, depth: 2,
+        type: "planet",
+        color: i % 2 === 0 ? clr.dir1 : clr.dir2,
+        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
+        depth: 1,
       };
-      radialNodes.set(node.id, rn);
-      resultNodes.push(rn);
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
     });
   }
 
-  // Ring 3: dust/leaves, r=210, Z ±3
+  // Shell 2: depth-2+ dirs, middle shell (90-120)
+  const depth2 = nodesByDepth.get(2) || [];
+  if (depth2.length > 0) {
+    const shell2Radius = SHELL.dir2Inner + Math.random() * (SHELL.dir2Outer - SHELL.dir2Inner);
+    const fiboPoints2 = fibonacciSphere(depth2.length, shell2Radius);
+    depth2.forEach((node, i) => {
+      const [x, y, z] = fiboPoints2[i];
+      const jitterZ = (Math.random() - 0.5) * 20;
+      const sn: SphericalNode = {
+        id: node.id, name: node.label, path: node.path,
+        type: "planet",
+        color: clr.dir2,
+        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
+        depth: 2,
+      };
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
+    });
+  }
+
+  // Collect all deeper dirs (depth 3+) as "planet" too — middle shell
   for (let d = 3; d <= 10; d++) {
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
-    for (const node of layer) {
-      const p = parentMap.get(node.id);
-      const pa = (p ? radialNodes.get(p)?.angle : undefined) ?? Math.random() * Math.PI * 2;
-      const spread = 0.15;
-      const angle = pa + (Math.random() - 0.5) * spread;
-      const z = (Math.random() - 0.5) * 6; // ±3
-      const rn: RadialNode = {
+    // deeper dirs pushed a bit outward
+    const r = SHELL.dir2Outer + (d - 2) * 10;
+    const fiboPoints = fibonacciSphere(layer.length, r);
+    layer.forEach((node, i) => {
+      const [x, y, z] = fiboPoints[i % fiboPoints.length];
+      const jitterZ = (Math.random() - 0.5) * 20;
+      const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
-        type: "dust", color: clr.dust,
-        radius: RING.dust, angle,
-        x: Math.cos(angle) * RING.dust,
-        y: z,
-        z: Math.sin(angle) * RING.dust,
+        type: "planet",
+        color: clr.dir2,
+        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
         depth: d,
       };
-      radialNodes.set(node.id, rn);
-      resultNodes.push(rn);
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
+    });
+  }
+
+  // Shell 3: file nodes (leaves with extensions) — outer shell 140-180 around parents
+  // Find all leaf nodes (nodes that are not sources of any edge)
+  const sourceSet = new Set(edges.map((e) => e.source));
+  const leafNodes = nodes.filter(
+    (n) => !sourceSet.has(n.id) && n.id !== root.id && depthMap.has(n.id),
+  );
+
+  // Group file nodes by parent
+  const filesByParent = new Map<string, FileNode[]>();
+  for (const fn of leafNodes) {
+    const p = parentMap.get(fn.id);
+    if (p) {
+      const list = filesByParent.get(p) || [];
+      list.push(fn);
+      filesByParent.set(p, list);
+    }
+  }
+
+  const fileRadiusBase = SHELL.fileInner + Math.random() * (SHELL.fileOuter - SHELL.fileInner);
+  for (const [parentId, childNodes] of filesByParent) {
+    const parentSN = sphericalNodes.get(parentId);
+    if (!parentSN) continue;
+    const parentPos: [number, number, number] = [parentSN.x, parentSN.y, parentSN.z];
+    const count = childNodes.length || 1;
+    const offsetRadius = 8 + Math.random() * 6; // per-parent cluster spread
+
+    childNodes.forEach((node, i) => {
+      // Spherical offset around parent position with sector constraint
+      const [ox, oy, oz] = randomOnSphere(offsetRadius);
+      // Blend: parent position + spherical offset + some fileRadius push outward
+      const pushFactor = (i / Math.max(count - 1, 1)) * 0.6 + 0.4; // 0.4-1.0
+      const pushR = fileRadiusBase * pushFactor + Math.random() * 10;
+      // Normalize parent position direction for outward push
+      const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
+      const nx = parentPos[0] / pDist;
+      const ny = parentPos[1] / pDist;
+      const nz = parentPos[2] / pDist;
+      const ext = (node.extension || "").toLowerCase();
+      const sn: SphericalNode = {
+        id: node.id, name: node.label, path: node.path,
+        type: "star",
+        color: clr.file[ext] || clr.defaultFile,
+        x: parentPos[0] + ox + nx * pushR * 0.3,
+        y: parentPos[1] + oy,
+        z: parentPos[2] + oz + nz * pushR * 0.3 + (Math.random() - 0.5) * 20,
+        extension: node.extension, size: node.size,
+        depth: depthMap.get(node.id) ?? 2,
+      };
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
+    });
+  }
+
+  // Shell 4: dust (remaining deeper nodes that aren't dirs or leaves)
+  const alreadyPlaced = new Set(sphericalNodes.keys());
+  const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
+  if (remaining.length > 0) {
+    for (const node of remaining) {
+      const p = parentMap.get(node.id);
+      const paPos: [number, number, number] = p && sphericalNodes.get(p)
+        ? [sphericalNodes.get(p)!.x, sphericalNodes.get(p)!.y, sphericalNodes.get(p)!.z]
+        : [0, 0, 0];
+      const dustR = SHELL.dustMin + Math.random() * (SHELL.dustMax - SHELL.dustMin);
+      const [sx, sy, sz] = randomOnSphere(dustR);
+      const d = depthMap.get(node.id) ?? 99;
+      const sn: SphericalNode = {
+        id: node.id, name: node.label, path: node.path,
+        type: "dust", color: clr.dust,
+        x: paPos[0] * 0.3 + sx,
+        y: paPos[1] * 0.3 + sy,
+        z: paPos[2] * 0.3 + sz + (Math.random() - 0.5) * 30,
+        depth: d,
+      };
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
     }
   }
 
   // Build edges: color by source depth
-  const resultEdges: RadialEdge[] = [];
+  const resultEdges: SphericalEdge[] = [];
   for (const e of edges) {
-    const from = radialNodes.get(e.source);
-    const to = radialNodes.get(e.target);
+    const from = sphericalNodes.get(e.source);
+    const to = sphericalNodes.get(e.target);
     if (!from || !to) continue;
     const color = from.depth === 0 ? clr.edgeRoot
       : from.depth === 1 ? clr.edgeDir
@@ -269,7 +368,7 @@ function computeRadialLayout(
 // SCENE (inside Canvas)
 // ══════════════════════════════════════════════════════════
 interface SceneProps {
-  layout: ReturnType<typeof computeRadialLayout>;
+  layout: ReturnType<typeof computeSphericalLayout>;
   settings: GalaxySettings;
   isDark: boolean;
   selectedId: string | null;
@@ -288,7 +387,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
   const dusts = useMemo(() => layout.nodes.filter((n) => n.type === "dust"), [layout.nodes]);
   const rootNode = useMemo(() => layout.nodes.find((n) => n.type === "root"), [layout.nodes]);
 
-  // ── StarPoints data ──
+  // ── StarPoints data (vertex colors, AdditiveBlending) ──
   const starPositions = useMemo(
     () => new Float32Array(stars.flatMap((s) => [s.x, s.y, s.z])),
     [stars],
@@ -308,33 +407,35 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
   );
   const dustColors = useMemo(() => {
     const c = new THREE.Color(clr.dust);
-    const r = c.r * 0.8, g = c.g * 0.7, b = c.b * 0.5;
-    return new Float32Array(dusts.flatMap(() => [r, g, b]));
+    return new Float32Array(dusts.flatMap(() => [c.r, c.g, c.b]));
   }, [dusts, clr.dust]);
 
-  // ── ArcEdges: single merged LineSegments buffer ──
+  // ── ArcEdges: 3D Bezier arcs merged into single LineSegments buffer ──
   const arcGeometry = useMemo(() => {
     const positions: number[] = [];
     const colors: number[] = [];
-    const push = 30; // control point outward push
 
     for (const edge of layout.edges) {
       const from = new THREE.Vector3(edge.from.x, edge.from.y, edge.from.z);
       const to = new THREE.Vector3(edge.to.x, edge.to.y, edge.to.z);
       const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
       const dist = mid.length();
+
+      // Control point: push midpoint outward by distance * 0.4
       let control: THREE.Vector3;
       if (dist > 0.01) {
-        control = mid.clone().add(mid.clone().normalize().multiplyScalar(push));
+        control = mid.clone().add(mid.clone().normalize().multiplyScalar(dist * 0.4));
       } else {
+        // Fallback for co-located nodes
         control = new THREE.Vector3(
           (from.x + to.x) / 2,
           (from.y + to.y) / 2 + 15,
           (from.z + to.z) / 2,
         );
       }
+
       const curve = new THREE.QuadraticBezierCurve3(from, control, to);
-      const pts = curve.getPoints(16);
+      const pts = curve.getPoints(24); // more segments for longer 3D arcs
       const col = new THREE.Color(edge.color);
       for (let i = 0; i < pts.length - 1; i++) {
         positions.push(pts[i].x, pts[i].y, pts[i].z);
@@ -438,26 +539,23 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     if (dustRef.current) dustRef.current.rotation.y += delta * 0.02;
   });
 
-  // ── Edge opacity normalized ──
+  // ── Edge opacity ──
   const edgeAlpha = Math.min(1, Math.max(0.02, settings.edgeOpacity * 2.5));
 
   return (
     <group>
-      {/* ── Background stars (count=5000) ── */}
-      <Stars radius={300} depth={100} count={5000} factor={5} saturation={0.3} fade speed={0.3} />
-
       {/* ── OrbitControls ── */}
       <OrbitControls
         enableDamping
         dampingFactor={0.08}
         autoRotate
-        autoRotateSpeed={0.2}
-        minDistance={20}
+        autoRotateSpeed={0.15}
+        minDistance={30}
         maxDistance={600}
-        maxPolarAngle={Math.PI * 0.8}
+        maxPolarAngle={Math.PI * 0.85}
       />
 
-      {/* ── ArcEdges: single merged LineSegments (vertexColor by source depth) ── */}
+      {/* ── ArcEdges: 3D Bezier arcs (vertexColor by source depth) ── */}
       {arcGeometry.attributes.position?.count > 0 && (
         <lineSegments geometry={arcGeometry}>
           <lineBasicMaterial
@@ -481,7 +579,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             vertexColors
             sizeAttenuation
             transparent
-            opacity={0.5}
+            opacity={0.45}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
           />
@@ -512,7 +610,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         </points>
       )}
 
-      {/* ── Planets: InstancedMesh with emissive (no PointLight needed) ── */}
+      {/* ── Planets: InstancedMesh with emissive ── */}
       {planets.length > 0 && (
         <instancedMesh
           ref={planetRef}
@@ -540,10 +638,10 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         </mesh>
       )}
 
-      {/* ── RootStar: single glowing sphere + 3 translucent halo layers ── */}
+      {/* ── RootStar: high-emissive core + 3 translucent halo spheres ── */}
       {rootNode && (
         <group>
-          {/* Core: high-emissive sphere */}
+          {/* Core */}
           <mesh
             onClick={handleRootClick}
             onPointerOver={handleRootOver}
@@ -559,28 +657,28 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
               toneMapped={false}
             />
           </mesh>
-          {/* 3 translucent halo spheres — root color → dir1 → dir2 gradient */}
+          {/* 3 translucent halo spheres */}
           <mesh>
             <sphereGeometry args={[3.5 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.root} transparent opacity={0.12} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[0]} transparent opacity={0.12} depthWrite={false} />
           </mesh>
           <mesh>
             <sphereGeometry args={[5.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.dir1} transparent opacity={0.06} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[1]} transparent opacity={0.06} depthWrite={false} />
           </mesh>
           <mesh>
             <sphereGeometry args={[7.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.dir2} transparent opacity={0.03} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[2]} transparent opacity={0.03} depthWrite={false} />
           </mesh>
         </group>
       )}
 
-      {/* ── Post-processing Bloom (threshold=0.1) ── */}
+      {/* ── Post-processing Bloom (threshold 0.08 for wide glow) ── */}
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.1}
+          luminanceThreshold={0.08}
           intensity={settings.bloomStrength}
-          radius={1.2}
+          radius={1.0}
           mipmapBlur
         />
       </EffectComposer>
@@ -638,11 +736,11 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // Compute radial layout from graph
+  // Compute spherical layout from graph
   const layout = useMemo(
     () =>
       graph
-        ? computeRadialLayout(graph.nodes, graph.edges, isDark)
+        ? computeSphericalLayout(graph.nodes, graph.edges, isDark)
         : { nodes: [], edges: [] },
     [graph, isDark],
   );
@@ -666,11 +764,14 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       {/* ── 3D Canvas or loading state ── */}
       {!loading && layout.nodes.length > 0 ? (
         <Canvas
-          camera={{ position: [0, 30, 120], fov: 50, near: 0.1, far: 1000 }}
+          camera={{ position: [0, 0, 200], fov: 50, near: 0.1, far: 1000 }}
           gl={{ antialias: true, alpha: false }}
           style={{ width: canvasW, height: dim.h - 48 }}
           onPointerMissed={() => setSelectedId(null)}
         >
+          {/* Background stars (count=8000) */}
+          <Stars radius={400} depth={150} count={8000} factor={6} saturation={0.2} fade speed={0.3} />
+
           <GalaxyScene
             layout={layout}
             settings={settings}
