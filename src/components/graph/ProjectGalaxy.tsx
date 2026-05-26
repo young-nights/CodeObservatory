@@ -957,29 +957,18 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
               toneMapped={false}
             />
           </mesh>
-          {/* Mid glow ring (xy plane) */}
-          <mesh rotation={[0, 0, 0]}>
-            <ringGeometry args={[3.5 * settings.nodeSize, 5.5 * settings.nodeSize, 80]} />
-            <meshBasicMaterial
-              color="#80b0ff"
-              side={THREE.DoubleSide}
-              transparent
-              opacity={0.25}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
+          {/* Root glow — transparent spheres instead of rings for reliability */}
+          <mesh>
+            <sphereGeometry args={[2.0 * settings.nodeSize, 32, 32]} />
+            <meshBasicMaterial color="#80b0ff" transparent opacity={0.08} depthWrite={false} />
           </mesh>
-          {/* Outer glow ring (xz plane) */}
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[4.5 * settings.nodeSize, 7.5 * settings.nodeSize, 80]} />
-            <meshBasicMaterial
-              color="#4040c0"
-              side={THREE.DoubleSide}
-              transparent
-              opacity={0.12}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
+          <mesh>
+            <sphereGeometry args={[3.0 * settings.nodeSize, 32, 32]} />
+            <meshBasicMaterial color="#c4b5fd" transparent opacity={0.04} depthWrite={false} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[4.5 * settings.nodeSize, 32, 32]} />
+            <meshBasicMaterial color="#e879f9" transparent opacity={0.02} depthWrite={false} />
           </mesh>
           {/* Ambient glow sphere */}
           <mesh>
