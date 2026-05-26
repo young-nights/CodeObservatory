@@ -357,6 +357,203 @@ function FlowParticles({ edges }: { edges: RadialEdge[] }) {
 }
 
 // ══════════════════════════════════════════════════════════
+// RIBBON COLOR GRADIENT HELPER
+// ══════════════════════════════════════════════════════════
+function getRibbonGradientColor(depth: number): THREE.Color {
+  const t = Math.min(Math.max(depth / 3, 0), 1);
+  const stops = [
+    { pos: 0, color: "#ffffff" },
+    { pos: 1 / 3, color: "#6366f1" },
+    { pos: 2 / 3, color: "#c084fc" },
+    { pos: 1, color: "#facc15" },
+  ];
+  let lo = stops[0], hi = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (t >= stops[i].pos && t <= stops[i + 1].pos) { lo = stops[i]; hi = stops[i + 1]; break; }
+  }
+  const segT = hi.pos === lo.pos ? 0 : (t - lo.pos) / (hi.pos - lo.pos);
+  return new THREE.Color(lo.color).lerp(new THREE.Color(hi.color), segT);
+}
+
+// ══════════════════════════════════════════════════════════
+// RIBBON ARCS — TubeGeometry with parallel side bands
+// ══════════════════════════════════════════════════════════
+function RibbonArcs({ edges }: { edges: RadialEdge[] }) {
+  const tubes = useMemo(() => {
+    const result: { geometry: THREE.BufferGeometry; color: string; opacity: number }[] = [];
+    const ring1Edges = edges.filter((e) => e.ring === 1);
+    const pushAmount = 25;
+
+    for (const edge of ring1Edges) {
+      const from = new THREE.Vector3(edge.from.x, edge.from.y, edge.from.z);
+      const to = new THREE.Vector3(edge.to.x, edge.to.y, edge.to.z);
+      const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
+      const dir = mid.clone();
+      const control =
+        dir.length() > 0.01
+          ? mid.clone().add(dir.normalize().multiplyScalar(pushAmount))
+          : new THREE.Vector3((from.x + to.x) / 2, (from.y + to.y) / 2 + 15, (from.z + to.z) / 2);
+      const curve = new THREE.QuadraticBezierCurve3(from, control, to);
+
+      const gradColor = getRibbonGradientColor(edge.from.depth);
+      const hex = "#" + gradColor.getHexString();
+
+      // Main ribbon arc (thick, bright)
+      result.push({
+        geometry: new THREE.TubeGeometry(curve, 24, 0.25, 8, false),
+        color: hex,
+        opacity: 0.55,
+      });
+
+      // Side bands (offset ±3 perpendicular to curve-plane)
+      const crossDir = dir.clone().normalize();
+      const up = new THREE.Vector3(0, 1, 0);
+      let perp = new THREE.Vector3().crossVectors(crossDir, up).normalize();
+      if (perp.length() < 0.01) perp = new THREE.Vector3(1, 0, 0);
+      perp.multiplyScalar(3);
+
+      const off1 = perp.clone();
+      const off2 = perp.clone().multiplyScalar(-1);
+
+      for (const offset of [off1, off2]) {
+        const fs = from.clone().add(offset);
+        const ts = to.clone().add(offset);
+        const ms = new THREE.Vector3().addVectors(fs, ts).multiplyScalar(0.5);
+        const cs =
+          ms.length() > 0.01
+            ? ms.clone().add(ms.clone().normalize().multiplyScalar(pushAmount))
+            : control.clone();
+        result.push({
+          geometry: new THREE.TubeGeometry(
+            new THREE.QuadraticBezierCurve3(fs, cs, ts),
+            16,
+            0.12,
+            8,
+            false,
+          ),
+          color: hex,
+          opacity: 0.15,
+        });
+      }
+    }
+    return result;
+  }, [edges]);
+
+  if (tubes.length === 0) return null;
+
+  return (
+    <group>
+      {tubes.map((t, i) => (
+        <mesh key={i} geometry={t.geometry}>
+          <meshBasicMaterial
+            color={t.color}
+            transparent
+            opacity={t.opacity}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// BOKEH PARTICLES — floating soft-focus dreamy dots
+// ══════════════════════════════════════════════════════════
+function BokehParticles() {
+  const COUNT = 1000;
+  const ref = useRef<THREE.Points>(null);
+
+  const { positions } = useMemo(() => {
+    const pos = new Float32Array(COUNT * 3);
+    for (let i = 0; i < COUNT; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 300;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 180;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+    }
+    return { positions: pos };
+  }, []);
+
+  const velocities = useRef<Float32Array | null>(null);
+  if (!velocities.current || velocities.current.length !== COUNT * 3) {
+    const v = new Float32Array(COUNT * 3);
+    for (let i = 0; i < COUNT * 3; i++) v[i] = (Math.random() - 0.5) * 2;
+    velocities.current = v;
+  }
+
+  useFrame((_, delta) => {
+    if (!ref.current) return;
+    const posArr = ref.current.geometry.attributes.position.array as Float32Array;
+    const vel = velocities.current!;
+    for (let i = 0; i < COUNT; i++) {
+      posArr[i * 3] += vel[i * 3] * delta * 4;
+      posArr[i * 3 + 1] += vel[i * 3 + 1] * delta * 4;
+      posArr[i * 3 + 2] += vel[i * 3 + 2] * delta * 4;
+      if (Math.abs(posArr[i * 3]) > 150) { posArr[i * 3] *= -0.9; vel[i * 3] = (Math.random() - 0.5) * 2; }
+      if (Math.abs(posArr[i * 3 + 1]) > 90) { posArr[i * 3 + 1] *= -0.9; vel[i * 3 + 1] = (Math.random() - 0.5) * 2; }
+      if (Math.abs(posArr[i * 3 + 2]) > 150) { posArr[i * 3 + 2] *= -0.9; vel[i * 3 + 2] = (Math.random() - 0.5) * 2; }
+    }
+    ref.current.geometry.attributes.position.needsUpdate = true;
+  });
+
+  return (
+    <points ref={ref}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        size={1.5}
+        color="#ffffff"
+        transparent
+        opacity={0.08}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// GOD RAYS — radial beams from root with slow rotation
+// ══════════════════════════════════════════════════════════
+function GodRays() {
+  const RAY_COUNT = 8;
+  const groupRef = useRef<THREE.Group>(null);
+
+  const rayGeos = useMemo(() =>
+    Array.from({ length: RAY_COUNT }, (_, i) => {
+      const angle = (i / RAY_COUNT) * Math.PI * 2;
+      const len = 90;
+      const pos = new Float32Array([0, 0, 0, Math.cos(angle) * len, 0, Math.sin(angle) * len]);
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      return geo;
+    }),
+  []);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) groupRef.current.rotation.y += delta * 0.12;
+  });
+
+  return (
+    <group ref={groupRef}>
+      {rayGeos.map((geo, i) => (
+        <lineSegments key={i} geometry={geo}>
+          <lineBasicMaterial
+            color="#80b0ff"
+            transparent
+            opacity={0.1}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+          />
+        </lineSegments>
+      ))}
+    </group>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
 // SCENE (inside Canvas)
 // ══════════════════════════════════════════════════════════
 interface SceneProps {
@@ -371,6 +568,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
   const clr = isDark ? C.dark : C.light;
   const groupRef = useRef<THREE.Group>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
+  const starRef = useRef<THREE.Points>(null);
   const [hovered, setHovered] = useState<{ id: string; position: [number, number, number] } | null>(null);
 
   // ═══ Planet (dir) data ═══
@@ -561,10 +759,48 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     }
   });
 
+  // ═══ Star flickering — randomly brighten ~5% each frame ═══
+  const starOrigColors = useRef<Float32Array | null>(null);
+  const starTimers = useRef<Float32Array | null>(null);
+  useFrame((_, delta) => {
+    if (!starRef.current || stars.length === 0) return;
+    const geo = starRef.current.geometry;
+    const colArr = geo.attributes.color.array as Float32Array;
+    if (!starOrigColors.current) {
+      starOrigColors.current = new Float32Array(colArr);
+      starTimers.current = new Float32Array(stars.length);
+    }
+    const timers = starTimers.current!;
+    const orig = starOrigColors.current!;
+    for (let i = 0; i < stars.length; i++) {
+      timers[i] -= delta;
+      if (timers[i] <= 0) {
+        colArr[i * 3] = orig[i * 3];
+        colArr[i * 3 + 1] = orig[i * 3 + 1];
+        colArr[i * 3 + 2] = orig[i * 3 + 2];
+      }
+    }
+    const flickerN = Math.max(1, Math.floor(stars.length * 0.05));
+    for (let f = 0; f < flickerN; f++) {
+      const idx = Math.floor(Math.random() * stars.length);
+      colArr[idx * 3] = 1.0;
+      colArr[idx * 3 + 1] = 1.0;
+      colArr[idx * 3 + 2] = 1.0;
+      timers[idx] = 0.12 + Math.random() * 0.25;
+    }
+    geo.attributes.color.needsUpdate = true;
+  });
+
   return (
     <group ref={groupRef}>
       {/* ── Deep field stars ── */}
       <Stars radius={300} depth={100} count={4000} factor={5} saturation={0.3} fade speed={0.3} />
+
+      {/* ── God rays from root ── */}
+      <GodRays />
+
+      {/* ── Bokeh floating particles ── */}
+      <BokehParticles />
 
       {/* ── OrbitControls ── */}
       <OrbitControls
@@ -577,17 +813,10 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         maxPolarAngle={Math.PI * 0.8}
       />
 
-      {/* ── Edge arcs (3 rings) ── */}
-      {edgeGeos[0].attributes.position.count > 0 && (
-        <lineSegments geometry={edgeGeos[0]}>
-          <lineBasicMaterial
-            color={clr.edgeR1}
-            transparent
-            opacity={edgeOpacities[0]}
-            depthWrite={false}
-          />
-        </lineSegments>
-      )}
+      {/* ── Ribbon arcs (Ring 1: root→planet, TubeGeometry) ── */}
+      <RibbonArcs edges={layout.edges} />
+
+      {/* ── Edge arcs (Rings 2 & 3: LineSegments) ── */}
       {edgeGeos[1].attributes.position.count > 0 && (
         <lineSegments geometry={edgeGeos[1]}>
           <lineBasicMaterial
@@ -637,6 +866,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
       {/* ── Star nodes (Ring 2) — Points ── */}
       {starData.positions.length > 0 && (
         <points
+          ref={starRef}
           onClick={handleStarClick}
           onPointerOver={handleStarPointerOver}
           onPointerOut={handlePlanetPointerOut}
