@@ -67,7 +67,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
       (r as any).__bloom = true;
       const cmp = new EffectComposer(r); cmp.addPass(new RenderPass(s, c));
       const bp = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-      bp.threshold = 0.08; bp.strength = strength; bp.radius = 0.8; cmp.addPass(bp);
+      bp.threshold = 0.04; bp.strength = strength; bp.radius = 0.9; cmp.addPass(bp);
       const orig = r.render.bind(r); r.render = () => cmp.render();
       (r as any).__bloomCmp = cmp; (r as any).__bloomPass = bp;
       clearInterval(iv);
@@ -91,7 +91,7 @@ function computeBounds(data: { nodes: FGNode[] }) {
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:1, edgeOpacity:0.15, bloomStrength:1.5, chargeStrength:-150, linkDistance:20, linkStrength:0.3, centerGravity:0.1 };
+const DEFS: GalaxySettings = { nodeSize:1, edgeOpacity:0.15, bloomStrength:2.0, chargeStrength:-120, linkDistance:18, linkStrength:0.35, centerGravity:0.15 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -158,9 +158,18 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     const r = n.type === "root" ? 1.4 : n.type === "dir" ? 0.6 : 0.25;
     const s = r * settings.nodeSize; const segs = n.type === "file" ? 8 : 24;
     const geo = new THREE.SphereGeometry(s, segs, segs);
-    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 2.5 : n.type === "dir" ? 1.2 : 0.7, roughness: 0.25, metalness: 0.1 });
+    const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 3.0 : n.type === "dir" ? 1.5 : 0.9, roughness: 0.2, metalness: 0.05 });
     g.add(new THREE.Mesh(geo, mat));
-    if (n.type !== "file") { const rg = new THREE.RingGeometry(s*1.6, s*2.3, 64); g.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: n.color, side: THREE.DoubleSide, transparent: true, opacity: 0.12 }))); }
+    // Bigger, brighter ring for dirs
+    if (n.type !== "file") {
+      const rg = new THREE.RingGeometry(s*1.5, s*2.5, 64);
+      g.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: n.color, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })));
+    }
+    // Root gets an extra large glow aura
+    if (n.type === "root") {
+      const aura = new THREE.RingGeometry(s*2.5, s*4, 64);
+      g.add(new THREE.Mesh(aura, new THREE.MeshBasicMaterial({ color: n.color, side: THREE.DoubleSide, transparent: true, opacity: 0.06 })));
+    }
     return g;
   }, [settings.nodeSize]);
 
