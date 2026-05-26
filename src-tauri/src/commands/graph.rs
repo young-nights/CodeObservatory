@@ -52,8 +52,56 @@ const SKIP_DIRS: &[&str] = &[
     "node_modules",
     "target",
     "dist",
+    "build",
     "__pycache__",
     ".vscode",
+    ".idea",
+    ".vs",
+    "obj",
+    "bin",
+    "Debug",
+    "Release",
+    "out",
+    ".next",
+    ".nuxt",
+    "coverage",
+    ".cache",
+    ".tox",
+    "venv",
+    ".venv",
+    "env",
+    ".env",
+    ".pytest_cache",
+    ".mypy_cache",
+];
+
+/// File extensions we want to track (whitelist — source code + docs)
+const TRACKED_EXTENSIONS: &[&str] = &[
+    "ts", "tsx", "js", "jsx", "rs", "py", "c", "cpp", "h", "hpp",
+    "css", "scss", "less", "html", "md", "json", "toml", "yaml", "yml",
+    "java", "go", "rb", "php", "swift", "kt", "kts", "vue", "svelte",
+    "svg", "txt", "xml", "proto", "sql", "graphql", "prisma",
+];
+
+/// File extensions to always skip (compiled artifacts, binaries, assets)
+const SKIP_EXTENSIONS: &[&str] = &[
+    "o", "obj", "exe", "dll", "so", "dylib", "a", "lib", "class",
+    "pyc", "pyd", "wasm", "bin", "elf", "hex", "map", "lock",
+    "png", "jpg", "jpeg", "gif", "ico", "webp", "bmp",
+    "ttf", "woff", "woff2", "eot", "mp3", "mp4", "wav", "ogg",
+    "pdf", "zip", "tar", "gz", "rar", "7z", "dat", "db", "sqlite",
+];
+
+/// Special filenames without extensions that we still want to track
+const SPECIAL_FILENAMES: &[&str] = &[
+    "Dockerfile",
+    "Makefile",
+    "CMakeLists.txt",
+    ".gitignore",
+    ".env.example",
+    ".eslintrc",
+    ".prettierrc",
+    ".editorconfig",
 ];
 
 /// Recursively scan a project directory and build a file/directory relationship graph.
@@ -94,6 +142,29 @@ pub fn scan_directory(project_path: String) -> Result<GraphData, String> {
     Ok(GraphData { nodes, edges })
 }
 
+/// Determine whether a file should be included in the graph based on its extension
+/// and special filenames (whitelist approach — only source code + docs).
+fn should_track_file(name: &str, ext: &Option<String>) -> bool {
+    // Special filenames without extensions (e.g. Dockerfile, Makefile, .gitignore)
+    if SPECIAL_FILENAMES.contains(&name) {
+        return true;
+    }
+
+    // If the file has an extension:
+    if let Some(e) = ext {
+        let ext_lower = e.to_lowercase();
+        // Blacklist is an extra safety net: explicitly skip compiled artifacts
+        if SKIP_EXTENSIONS.contains(&ext_lower.as_str()) {
+            return false;
+        }
+        // Whitelist: only track known source/doc extensions
+        return TRACKED_EXTENSIONS.contains(&ext_lower.as_str());
+    }
+
+    // Files without extensions that aren't in SPECIAL_FILENAMES → skip
+    false
+}
+
 /// Recursively walk a directory, collecting nodes and edges.
 fn walk_dir(
     dir: &PathBuf,
@@ -110,17 +181,12 @@ fn walk_dir(
         let file_name = entry.file_name();
         let name_str = file_name.to_string_lossy().to_string();
 
-        // Skip hidden files/folders (except root itself)
-        if name_str.starts_with('.') {
-            continue;
-        }
-
         let file_type = entry.file_type()?;
         let full_path = entry.path();
 
         if file_type.is_dir() {
-            // Skip known noise directories
-            if SKIP_DIRS.contains(&name_str.as_str()) {
+            // Skip known noise directories (includes dot-prefixed like .git, .vscode)
+            if SKIP_DIRS.contains(&name_str.as_str()) || name_str.starts_with('.') {
                 continue;
             }
 
@@ -150,10 +216,16 @@ fn walk_dir(
             // Recurse into subdirectory
             walk_dir(&full_path, root_prefix, &dir_id, nodes, edges, edge_idx)?;
         } else if file_type.is_file() {
-            let file_id = full_path.to_string_lossy().to_string();
             let ext = full_path
                 .extension()
                 .map(|e| e.to_string_lossy().to_string());
+
+            // Filter: only track source-code / documentation files
+            if !should_track_file(&name_str, &ext) {
+                continue;
+            }
+
+            let file_id = full_path.to_string_lossy().to_string();
             let size = entry.metadata().ok().map(|m| m.len());
             let modified = get_modified_iso(&full_path);
 

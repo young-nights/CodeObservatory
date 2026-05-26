@@ -92,11 +92,21 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         cyRef.current = null;
       }
 
+      const totalNodes = data.nodes.length;
+      const hideLabels = totalNodes > 1000;
+      const autoLayout: LayoutName = totalNodes > 500 ? "breadthfirst" : "cose";
+
+      // Auto-select layout for large graphs
+      if (autoLayout !== layoutName) {
+        setLayoutName(autoLayout);
+      }
+
       const elements: cytoscape.ElementDefinition[] = [
         ...data.nodes.map((n: FileNode) => ({
           data: {
             id: n.id,
-            label: n.label,
+            // Hide labels on non-directory nodes when graph is huge
+            label: hideLabels && n.kind !== "dir" ? "" : n.label,
             path: n.path,
             kind: n.kind,
             extension: n.extension,
@@ -197,14 +207,14 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           },
         ],
         layout: {
-          name: layoutName,
-          ...(layoutName === "cose"
+          name: autoLayout,
+          ...(autoLayout === "cose"
             ? {
                 animate: false,
-                nodeRepulsion: () => 6000,
-                idealEdgeLength: () => 100,
+                nodeRepulsion: () => 4000,
+                idealEdgeLength: () => 80,
                 gravity: 0.3,
-                numIter: 2000,
+                numIter: 500,
               }
             : {
                 directed: false,
@@ -286,10 +296,11 @@ export function GraphPage({ projectPath }: GraphPageProps) {
 
       cyRef.current = cy;
     },
-    [layoutName],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
-  // Re-initialize when graph data or layout changes
+  // Re-initialize only when graph data changes (not on layout switch)
   useEffect(() => {
     if (graph && graph.nodes.length > 0) {
       initCytoscape(graph);
@@ -300,9 +311,10 @@ export function GraphPage({ projectPath }: GraphPageProps) {
         cyRef.current = null;
       }
     };
-  }, [graph, initCytoscape]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph]);
 
-  // Apply layout change without full re-init
+  // Apply layout change without full re-init (no cytoscape rebuild)
   const handleLayoutChange = useCallback(
     (name: LayoutName) => {
       setLayoutName(name);
@@ -313,10 +325,10 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           ...(name === "cose"
             ? {
                 animate: true,
-                nodeRepulsion: () => 6000,
-                idealEdgeLength: () => 100,
+                nodeRepulsion: () => 4000,
+                idealEdgeLength: () => 80,
                 gravity: 0.3,
-                numIter: 1000,
+                numIter: 500,
               }
             : {
                 directed: false,
@@ -406,6 +418,33 @@ export function GraphPage({ projectPath }: GraphPageProps) {
           </button>
         </div>
       </div>
+
+      {/* ── Large graph warning ── */}
+      {nodeCount > 1000 && (
+        <div className="co-cosmic-warning-banner flex items-center gap-2 px-5 py-1.5 text-xs text-amber-300/80 bg-amber-950/20 border-b border-amber-500/15">
+          <span>⚠️</span>
+          <span>
+            Large graph ({nodeCount.toLocaleString()} nodes). Non-directory labels hidden for performance.
+            {layoutName === "cose" && " Consider switching to hierarchy layout."}
+          </span>
+          {layoutName === "cose" && (
+            <button
+              className="ml-auto underline text-amber-300 hover:text-amber-200"
+              onClick={() => handleLayoutChange("breadthfirst")}
+            >
+              Switch to hierarchy
+            </button>
+          )}
+        </div>
+      )}
+      {nodeCount > 500 && nodeCount <= 1000 && (
+        <div className="co-cosmic-warning-banner flex items-center gap-2 px-5 py-1.5 text-xs text-sky-300/70 bg-sky-950/15 border-b border-sky-500/10">
+          <span>ℹ️</span>
+          <span>
+            {nodeCount.toLocaleString()} nodes detected. Auto-selected hierarchy layout for better performance.
+          </span>
+        </div>
+      )}
 
       {/* ── Graph Canvas ── */}
       <div className="co-cosmic-canvas-wrapper">
