@@ -1,4 +1,4 @@
-// Graph building command: construct file relationship graph from change history
+// Graph building commands: change-history graph + directory scan graph
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,7 +10,20 @@ pub struct FileNode {
     pub label: String,
     pub path: String,
     #[serde(rename = "changeCount")]
-    pub change_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_count: Option<u32>,
+    /// "dir" or "file"; present only in scan_directory results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// File extension (without dot); present only in scan_directory results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extension: Option<String>,
+    /// File size in bytes; present only for files in scan_directory results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// Last modification time as ISO 8601 string; present only in scan_directory results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
 }
 
 /// An edge between two files in the graph
@@ -19,8 +32,10 @@ pub struct FileEdge {
     pub id: String,
     pub source: String,
     pub target: String,
-    pub weight: u32,
-    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
 }
 
 /// The complete graph data
@@ -28,6 +43,154 @@ pub struct FileEdge {
 pub struct GraphData {
     pub nodes: Vec<FileNode>,
     pub edges: Vec<FileEdge>,
+}
+
+/// Directories to skip during scanning
+const SKIP_DIRS: &[&str] = &[
+    ".observatory",
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "__pycache__",
+    ".vscode",
+];
+
+/// Recursively scan a project directory and build a file/directory relationship graph.
+#[tauri::command]
+pub fn scan_directory(project_path: String) -> Result<GraphData, String> {
+    let root = PathBuf::from(&project_path);
+    if !root.exists() {
+        return Err(format!("Path does not exist: {}", project_path));
+    }
+    if !root.is_dir() {
+        return Err(format!("Path is not a directory: {}", project_path));
+    }
+
+    let mut nodes: Vec<FileNode> = Vec::new();
+    let mut edges: Vec<FileEdge> = Vec::new();
+    let mut edge_idx: u32 = 0;
+
+    // Add root node
+    let root_label = root
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| project_path.clone());
+    let root_modified = get_modified_iso(&root);
+    nodes.push(FileNode {
+        id: project_path.clone(),
+        label: root_label.clone(),
+        path: project_path.clone(),
+        change_count: None,
+        kind: Some("dir".to_string()),
+        extension: None,
+        size: None,
+        modified: root_modified,
+    });
+
+    walk_dir(&root, &project_path, &project_path, &mut nodes, &mut edges, &mut edge_idx)
+        .map_err(|e| format!("Failed to scan directory: {}", e))?;
+
+    Ok(GraphData { nodes, edges })
+}
+
+/// Recursively walk a directory, collecting nodes and edges.
+fn walk_dir(
+    dir: &PathBuf,
+    root_prefix: &str,
+    parent_id: &str,
+    nodes: &mut Vec<FileNode>,
+    edges: &mut Vec<FileEdge>,
+    edge_idx: &mut u32,
+) -> std::io::Result<()> {
+    let entries = std::fs::read_dir(dir)?;
+
+    for entry in entries {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let name_str = file_name.to_string_lossy().to_string();
+
+        // Skip hidden files/folders (except root itself)
+        if name_str.starts_with('.') {
+            continue;
+        }
+
+        let file_type = entry.file_type()?;
+        let full_path = entry.path();
+
+        if file_type.is_dir() {
+            // Skip known noise directories
+            if SKIP_DIRS.contains(&name_str.as_str()) {
+                continue;
+            }
+
+            let dir_id = full_path.to_string_lossy().to_string();
+            let modified = get_modified_iso(&full_path);
+
+            nodes.push(FileNode {
+                id: dir_id.clone(),
+                label: name_str.clone(),
+                path: dir_id.clone(),
+                change_count: None,
+                kind: Some("dir".to_string()),
+                extension: None,
+                size: None,
+                modified,
+            });
+
+            edges.push(FileEdge {
+                id: format!("e{}", edge_idx),
+                source: parent_id.to_string(),
+                target: dir_id.clone(),
+                weight: None,
+                label: None,
+            });
+            *edge_idx += 1;
+
+            // Recurse into subdirectory
+            walk_dir(&full_path, root_prefix, &dir_id, nodes, edges, edge_idx)?;
+        } else if file_type.is_file() {
+            let file_id = full_path.to_string_lossy().to_string();
+            let ext = full_path
+                .extension()
+                .map(|e| e.to_string_lossy().to_string());
+            let size = entry.metadata().ok().map(|m| m.len());
+            let modified = get_modified_iso(&full_path);
+
+            nodes.push(FileNode {
+                id: file_id.clone(),
+                label: name_str.clone(),
+                path: file_id.clone(),
+                change_count: None,
+                kind: Some("file".to_string()),
+                extension: ext,
+                size,
+                modified,
+            });
+
+            edges.push(FileEdge {
+                id: format!("e{}", edge_idx),
+                source: parent_id.to_string(),
+                target: file_id,
+                weight: None,
+                label: None,
+            });
+            *edge_idx += 1;
+        }
+    }
+
+    Ok(())
+}
+
+/// Get the last-modified time of a path as an ISO 8601 string.
+fn get_modified_iso(path: &PathBuf) -> Option<String> {
+    path.metadata()
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .map(|t| {
+            let dt: chrono::DateTime<chrono::Utc> = t.into();
+            dt.to_rfc3339()
+        })
 }
 
 /// Build a file relationship graph from the change history.
@@ -78,7 +241,11 @@ pub fn build_graph(project_path: String) -> Result<GraphData, String> {
             id: node_id,
             label,
             path: path.clone(),
-            change_count: *count,
+            change_count: Some(*count),
+            kind: None,
+            extension: None,
+            size: None,
+            modified: None,
         });
     }
 
@@ -143,8 +310,8 @@ pub fn build_graph(project_path: String) -> Result<GraphData, String> {
             id: format!("e{}", edge_idx),
             source: source.clone(),
             target: target.clone(),
-            weight: *weight,
-            label: format!("{} co-changes", weight),
+            weight: Some(*weight),
+            label: Some(format!("{} co-changes", weight)),
         });
         edge_idx += 1;
     }

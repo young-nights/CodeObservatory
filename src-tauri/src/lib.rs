@@ -28,6 +28,7 @@ pub fn run() {
             commands::changes::get_change_by_id,
             // Graph commands
             commands::graph::build_graph,
+            commands::graph::scan_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CodeObservatory");

@@ -1,148 +1,295 @@
-// Graph page — Cytoscape.js file relationship visualization
-// co-theme design system. Layout/spacing: Tailwind. Colors/effects: co-* CSS.
-// No framer-motion; animated with co-animate-* CSS classes.
+// Graph page — Cosmic galaxy file relationship visualization
+// Dark nebula theme with glowing nodes and star-field background.
 
-import { useEffect, useRef, useCallback } from "react";
-import cytoscape, { type Core } from "cytoscape";
-import { Card, CardContent } from "@/components/ui/card";
+import { useEffect, useRef, useCallback, useState } from "react";
+import cytoscape, { type Core, type EventObject } from "cytoscape";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useGraph } from "@/hooks/useObservatory";
+import { useScanGraph } from "@/hooks/useObservatory";
 import type { GraphData, FileNode, FileEdge } from "@/lib/types";
-import { Share2, RefreshCw } from "lucide-react";
+import {
+  Share2,
+  RefreshCw,
+  Maximize2,
+  GitBranch,
+  Network,
+  Circle,
+} from "lucide-react";
 
+// ---------------------------------------------------------------------------
+// Cosmic nebula color palette — color by file type
+// ---------------------------------------------------------------------------
+const COSMIC_COLORS: Record<string, string> = {
+  dir: "#fbbf24", // amber/gold — stellar cores
+  ts: "#60a5fa", // blue — TypeScript
+  tsx: "#60a5fa",
+  rs: "#fb923c", // orange — Rust
+  json: "#facc15", // yellow — Config
+  toml: "#facc15",
+  yaml: "#facc15",
+  yml: "#facc15",
+  md: "#c084fc", // purple — Markdown
+  css: "#34d399", // green — Style
+  html: "#34d399",
+  scss: "#34d399",
+  c: "#94a3b8", // gray — C/C++
+  h: "#94a3b8",
+  cpp: "#94a3b8",
+  hpp: "#94a3b8",
+  py: "#2dd4bf", // teal — Python
+  default: "#e2e8f0", // silver — other
+};
+
+function getCosmicColor(node: FileNode): string {
+  if (node.kind === "dir") return COSMIC_COLORS.dir;
+  const ext =
+    node.extension ?? node.path.split(".").pop()?.toLowerCase() ?? "";
+  return COSMIC_COLORS[ext] || COSMIC_COLORS.default;
+}
+
+function getNodeSize(node: FileNode): number {
+  return node.kind === "dir" ? 24 : 16;
+}
+
+function formatSize(bytes?: number): string {
+  if (bytes == null || bytes === 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 interface GraphPageProps {
   projectPath: string;
 }
 
-// Dark-theme node colors by extension
-const NODE_COLORS: Record<string, string> = {
-  ts: "#60a5fa",
-  tsx: "#67e8f9",
-  js: "#facc15",
-  jsx: "#67e8f9",
-  css: "#38bdf8",
-  html: "#fb923c",
-  json: "#a3a3a3",
-  md: "#818cf8",
-  rs: "#f59e0b",
-  toml: "#f97316",
-  py: "#4ade80",
-  go: "#2dd4bf",
-  default: "#6b7280",
-};
-
-function getNodeColor(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase() || "";
-  return NODE_COLORS[ext] || NODE_COLORS.default;
-}
+type LayoutName = "cose" | "breadthfirst";
 
 export function GraphPage({ projectPath }: GraphPageProps) {
-  const { graph, loading, refresh } = useGraph(projectPath);
+  const { graph, loading, refresh } = useScanGraph(projectPath);
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const [layoutName, setLayoutName] = useState<LayoutName>("cose");
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    label: string;
+    path: string;
+    kind: string;
+    size: string;
+  }>({ visible: false, x: 0, y: 0, label: "", path: "", kind: "", size: "" });
 
-  const initCytoscape = useCallback((data: GraphData) => {
-    if (!containerRef.current) return;
+  // Build Cytoscape elements from GraphData
+  const initCytoscape = useCallback(
+    (data: GraphData) => {
+      if (!containerRef.current) return;
 
-    if (cyRef.current) {
-      cyRef.current.destroy();
-    }
+      if (cyRef.current) {
+        cyRef.current.destroy();
+        cyRef.current = null;
+      }
 
-    const elements: cytoscape.ElementDefinition[] = [
-      ...data.nodes.map((n: FileNode) => ({
-        data: {
-          id: n.id,
-          label: n.label,
-          path: n.path,
-          changeCount: n.changeCount,
-          color: getNodeColor(n.path),
-        },
-      })),
-      ...data.edges.map((e: FileEdge) => ({
-        data: {
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          weight: e.weight,
-          label: e.label,
-        },
-      })),
-    ];
-
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements,
-      style: [
-        {
-          selector: "node",
-          style: {
-            "background-color": "data(color)",
-            label: "data(label)",
-            "font-size": "10px",
-            "text-valign": "bottom",
-            "text-halign": "center",
-            "text-margin-y": 5,
-            color: "#9ca3af",
-            width: "mapData(changeCount, 1, 20, 18, 40)",
-            height: "mapData(changeCount, 1, 20, 18, 40)",
-            "border-width": 2,
-            "border-color": "#1e293b",
-            "border-opacity": 0.8,
-            "background-opacity": 0.9,
-            "font-family": "Inter, sans-serif",
+      const elements: cytoscape.ElementDefinition[] = [
+        ...data.nodes.map((n: FileNode) => ({
+          data: {
+            id: n.id,
+            label: n.label,
+            path: n.path,
+            kind: n.kind,
+            extension: n.extension,
+            size: n.size,
+            modified: n.modified,
+            color: getCosmicColor(n),
+            nodeSize: getNodeSize(n),
           },
-        },
-        {
-          selector: "node:selected",
-          style: {
-            "border-color": "#818cf8",
-            "border-width": 3,
-            "border-opacity": 1,
+        })),
+        ...data.edges.map((e: FileEdge) => ({
+          data: {
+            id: e.id,
+            source: e.source,
+            target: e.target,
           },
-        },
-        {
-          selector: "edge",
-          style: {
-            width: "mapData(weight, 1, 10, 0.5, 2.5)",
-            "line-color": "#334155",
-            "target-arrow-color": "#475569",
-            "target-arrow-shape": "triangle",
-            "curve-style": "bezier",
-            label: "data(label)",
-            "font-size": "8px",
-            color: "#475569",
-            "font-family": "Inter, sans-serif",
-            "text-background-opacity": 1,
-            "text-background-color": "#0f172a",
-            "text-background-padding": "2px",
-            "text-background-shape": "roundrectangle",
-          },
-        },
-        {
-          selector: "edge:selected",
-          style: {
-            "line-color": "#818cf8",
-            "target-arrow-color": "#818cf8",
-            width: 3,
-          },
-        },
-      ],
-      layout: {
-        name: "cose",
-        animate: false,
-        nodeRepulsion: () => 4000,
-        idealEdgeLength: () => 120,
-        gravity: 0.25,
-      },
-      wheelSensitivity: 0.3,
-      minZoom: 0.3,
-      maxZoom: 3,
-    });
+        })),
+      ];
 
-    cyRef.current = cy;
-  }, []);
+      const cy = cytoscape({
+        container: containerRef.current,
+        elements,
+        style: [
+          // --- Nodes ---
+          {
+            selector: "node",
+            style: {
+              "background-color": "data(color)",
+              "background-opacity": 0.92,
+              width: "data(nodeSize)",
+              height: "data(nodeSize)",
+              label: "data(label)",
+              "font-size": "9px",
+              "text-valign": "bottom",
+              "text-halign": "center",
+              "text-margin-y": 6,
+              color: "data(color)",
+              "text-opacity": 0.8,
+              "font-family": "'Inter', 'Segoe UI', system-ui, sans-serif",
+              // border to create a subtle ring
+              "border-width": 1.5,
+              "border-color": "data(color)",
+              "border-opacity": 0.35,
+            },
+          },
+          {
+            selector: "node:selected",
+            style: {
+              "border-width": 3,
+              "border-opacity": 0.9,
+              "border-color": "#fff",
+              "z-index": 9999,
+              // scale up on selection
+              width: "mapData(nodeSize, 16, 24, 22, 36)",
+              height: "mapData(nodeSize, 16, 24, 22, 36)",
+            },
+          },
+          {
+            // Dim non-neighbours when a node is selected
+            selector: "node.dimmed",
+            style: {
+              opacity: 0.12,
+              "text-opacity": 0,
+            },
+          },
+          {
+            // Highlight direct neighbours
+            selector: "node.highlighted",
+            style: {
+              opacity: 1,
+              "border-color": "#fff",
+              "border-opacity": 0.7,
+              "border-width": 2,
+            },
+          },
+          // --- Edges ---
+          {
+            selector: "edge",
+            style: {
+              width: 0.5,
+              "line-color": "rgba(100, 116, 139, 0.12)",
+              "curve-style": "bezier",
+              "target-arrow-shape": "none",
+            },
+          },
+          {
+            selector: "edge.dimmed",
+            style: {
+              opacity: 0,
+            },
+          },
+          {
+            selector: "edge.highlighted",
+            style: {
+              "line-color": "rgba(255, 255, 255, 0.3)",
+              width: 1,
+              opacity: 0.9,
+            },
+          },
+        ],
+        layout: {
+          name: layoutName,
+          ...(layoutName === "cose"
+            ? {
+                animate: false,
+                nodeRepulsion: () => 6000,
+                idealEdgeLength: () => 100,
+                gravity: 0.3,
+                numIter: 2000,
+              }
+            : {
+                directed: false,
+                spacingFactor: 1.2,
+              }),
+        },
+        wheelSensitivity: 0.25,
+        minZoom: 0.15,
+        maxZoom: 4,
+      });
 
+      // ---- Tooltip on mouseover ----
+      cy.on("mouseover", "node", (evt: EventObject) => {
+        const node = evt.target;
+        const pos = node.renderedPosition();
+        const containerPos = containerRef.current?.getBoundingClientRect();
+        if (!containerPos) return;
+
+        const data = node.data();
+        const k = data.kind ?? "file";
+        const sz = formatSize(data.size as number | undefined);
+        setTooltip({
+          visible: true,
+          x: pos.x + containerPos.left + 12,
+          y: pos.y + containerPos.top - 60,
+          label: data.label as string,
+          path: data.path as string,
+          kind: k === "dir" ? "📁 Directory" : "📄 File",
+          size: sz,
+        });
+      });
+
+      cy.on("mouseout", "node", () => {
+        setTooltip((prev) => ({ ...prev, visible: false }));
+      });
+
+      // ---- Click: highlight neighbours ----
+      cy.on("tap", "node", (evt: EventObject) => {
+        const target = evt.target;
+        const neighbourhood = target
+          .closedNeighborhood()
+          .add(target.connectedEdges());
+
+        cy.elements().addClass("dimmed");
+        neighbourhood.removeClass("dimmed").addClass("highlighted");
+
+        // Flash the target node
+        target
+          .removeClass("dimmed")
+          .addClass("highlighted")
+          .animate({
+            style: { "border-color": "#fff", "border-width": 5 },
+            duration: 200,
+          })
+          .animate({
+            style: { "border-color": "#fff", "border-width": 3 },
+            duration: 200,
+          });
+      });
+
+      cy.on("tap", (evt: EventObject) => {
+        if (evt.target === cy) {
+          // Clicked background — clear highlights
+          cy.elements().removeClass("dimmed").removeClass("highlighted");
+        }
+      });
+
+      // ---- Double-click: log details (extension point) ----
+      cy.on("dblclick", "node", (evt: EventObject) => {
+        const data = evt.target.data();
+        console.log("[Graph] Double-clicked node:", {
+          label: data.label,
+          path: data.path,
+          kind: data.kind,
+          size: data.size,
+          modified: data.modified,
+        });
+      });
+
+      cyRef.current = cy;
+    },
+    [layoutName],
+  );
+
+  // Re-initialize when graph data or layout changes
   useEffect(() => {
     if (graph && graph.nodes.length > 0) {
       initCytoscape(graph);
@@ -155,76 +302,161 @@ export function GraphPage({ projectPath }: GraphPageProps) {
     };
   }, [graph, initCytoscape]);
 
+  // Apply layout change without full re-init
+  const handleLayoutChange = useCallback(
+    (name: LayoutName) => {
+      setLayoutName(name);
+      if (!cyRef.current) return;
+      cyRef.current
+        .layout({
+          name,
+          ...(name === "cose"
+            ? {
+                animate: true,
+                nodeRepulsion: () => 6000,
+                idealEdgeLength: () => 100,
+                gravity: 0.3,
+                numIter: 1000,
+              }
+            : {
+                directed: false,
+                spacingFactor: 1.2,
+                animate: true,
+              }),
+        })
+        .run();
+    },
+    [],
+  );
+
+  const handleFit = useCallback(() => {
+    cyRef.current?.fit(undefined, 50);
+  }, []);
+
   const nodeCount = graph?.nodes.length ?? 0;
   const edgeCount = graph?.edges.length ?? 0;
+  const dirCount = graph?.nodes.filter((n) => n.kind === "dir").length ?? 0;
+  const fileCount = graph?.nodes.filter((n) => n.kind === "file").length ?? 0;
 
   return (
-    <div className="co-page flex flex-col p-6 space-y-4">
-      {/* Toolbar */}
-      <div className="co-graph-toolbar co-animate-fade-in flex items-center justify-between rounded-lg">
+    <div className="co-page co-cosmic-graph-page flex flex-col">
+      {/* ── Toolbar ── */}
+      <div className="co-graph-toolbar co-cosmic-toolbar flex items-center justify-between px-5 py-2.5">
         <div className="flex items-center gap-3">
-          <Share2 size={22} color="var(--co-accent)" />
-          <h2 className="text-xl font-semibold tracking-tight" style={{ color: "var(--co-text)" }}>
-            File Relationship Graph
+          <div className="co-cosmic-brand-icon">
+            <Share2 size={16} />
+          </div>
+          <h2 className="text-sm font-semibold tracking-wide text-white/85">
+            Cosmic File Graph
           </h2>
           {graph && (
-            <div className="flex items-center gap-2 ml-2">
-              <span className="co-badge co-badge-secondary text-[10px] font-normal">
-                {nodeCount} nodes
+            <div className="flex items-center gap-1.5 ml-2">
+              <span className="co-cosmic-badge">
+                <Circle size={8} fill="#fbbf24" stroke="none" />
+                {dirCount} dirs
               </span>
-              <span className="co-badge co-badge-secondary text-[10px] font-normal">
+              <span className="co-cosmic-badge">
+                <Circle size={8} fill="#e2e8f0" stroke="none" />
+                {fileCount} files
+              </span>
+              <span className="co-cosmic-badge">
                 {edgeCount} edges
               </span>
             </div>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
-          <RefreshCw
-            size={14}
-            className={loading ? "animate-spin" : ""}
-          />
-          Refresh
-        </Button>
+
+        <div className="flex items-center gap-1.5">
+          {/* Layout toggle */}
+          <div className="co-cosmic-layout-toggle">
+            <button
+              className={`co-cosmic-layout-btn ${layoutName === "cose" ? "active" : ""}`}
+              onClick={() => handleLayoutChange("cose")}
+              title="Force-directed layout (cose)"
+            >
+              <Network size={13} />
+            </button>
+            <button
+              className={`co-cosmic-layout-btn ${layoutName === "breadthfirst" ? "active" : ""}`}
+              onClick={() => handleLayoutChange("breadthfirst")}
+              title="Hierarchy layout (breadthfirst)"
+            >
+              <GitBranch size={13} />
+            </button>
+          </div>
+          {/* Fit */}
+          <button
+            className="co-cosmic-icon-btn"
+            onClick={handleFit}
+            title="Fit to screen"
+          >
+            <Maximize2 size={14} />
+          </button>
+          {/* Refresh */}
+          <button
+            className="co-cosmic-icon-btn"
+            onClick={refresh}
+            disabled={loading}
+            title="Re-scan project directory"
+          >
+            <RefreshCw
+              size={14}
+              className={loading ? "animate-spin" : ""}
+            />
+          </button>
+        </div>
       </div>
 
-      {/* Graph canvas */}
-      <div className="co-animate-fade-in flex-1" style={{ minHeight: 0 }}>
-        <Card className="h-full overflow-hidden">
-          <CardContent className="p-0 h-full">
-            {loading && !graph ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3">
-                <RefreshCw
-                  size={24}
-                  color="var(--co-text-muted)"
-                  className="animate-spin"
-                />
-                <p style={{ color: "var(--co-text-muted)" }} className="text-sm">
-                  Building graph...
-                </p>
-              </div>
-            ) : graph && graph.nodes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <Share2
-                  size={36}
-                  color="var(--co-text-dim)"
-                  className="mb-3 opacity-30"
-                />
-                <p style={{ color: "var(--co-text-muted)" }} className="text-sm font-medium">
-                  No graph data available
-                </p>
-                <p style={{ color: "var(--co-text-dim)" }} className="text-xs mt-1">
-                  File changes will generate graph relationships
-                </p>
-              </div>
-            ) : (
-              <div
-                ref={containerRef}
-                className="co-graph-container"
-                style={{ minHeight: "500px" }}
-              />
-            )}
-          </CardContent>
-        </Card>
+      {/* ── Graph Canvas ── */}
+      <div className="co-cosmic-canvas-wrapper">
+        {/* Star-field background layer */}
+        <div className="co-cosmic-starfield" />
+
+        {loading && !graph ? (
+          <div className="co-cosmic-loading">
+            <div className="co-cosmic-loading-spinner" />
+            <p className="co-cosmic-loading-text">Scanning the nebula…</p>
+          </div>
+        ) : graph && graph.nodes.length === 0 ? (
+          <div className="co-cosmic-empty">
+            <Share2 size={40} className="opacity-15 mb-4" />
+            <p className="co-cosmic-empty-title">Empty Space</p>
+            <p className="co-cosmic-empty-desc">
+              This directory contains no files or folders — a void waiting for stars.
+            </p>
+          </div>
+        ) : !projectPath ? (
+          <div className="co-cosmic-empty">
+            <Share2 size={40} className="opacity-15 mb-4" />
+            <p className="co-cosmic-empty-title">No Project Selected</p>
+            <p className="co-cosmic-empty-desc">
+              Open a project to reveal its cosmic file constellation.
+            </p>
+          </div>
+        ) : (
+          <div
+            ref={containerRef}
+            className="co-cosmic-cy-container"
+          />
+        )}
+
+        {/* Tooltip */}
+        {tooltip.visible && (
+          <div
+            className="co-cosmic-tooltip"
+            style={{
+              left: tooltip.x,
+              top: tooltip.y,
+            }}
+          >
+            <div className="co-cosmic-tooltip-label">{tooltip.label}</div>
+            <div className="co-cosmic-tooltip-meta">
+              <span>{tooltip.kind}</span>
+              {tooltip.size && <span>· {tooltip.size}</span>}
+            </div>
+            <div className="co-cosmic-tooltip-path">{tooltip.path}</div>
+          </div>
+        )}
       </div>
     </div>
   );

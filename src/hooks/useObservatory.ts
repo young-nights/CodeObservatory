@@ -165,3 +165,32 @@ export function useGraph(projectPath: string | null) {
 
   return { graph, loading, refresh: fetchGraph };
 }
+
+/** Hook that scans a project directory and builds a cosmic file-tree graph */
+export function useScanGraph(projectPath: string | null) {
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchGraph = useCallback(async () => {
+    if (!projectPath) {
+      setGraph(null);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await api.scanDirectory(projectPath);
+      setGraph(data);
+    } catch (err) {
+      console.error("Failed to scan directory:", err);
+      setGraph(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectPath]);
+
+  useEffect(() => {
+    fetchGraph();
+  }, [fetchGraph]);
+
+  return { graph, loading, refresh: fetchGraph };
+}

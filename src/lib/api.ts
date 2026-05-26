@@ -70,3 +70,8 @@ export async function getChangeById(
 export async function buildGraph(projectPath: string): Promise<GraphData> {
   return invoke<GraphData>("build_graph", { projectPath });
 }
+
+/** Scan project directory and build a cosmic file/directory graph */
+export async function scanDirectory(projectPath: string): Promise<GraphData> {
+  return invoke<GraphData>("scan_directory", { projectPath });
+}
