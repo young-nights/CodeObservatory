@@ -2,9 +2,7 @@ import { useContext } from "react";
 import ProjectGalaxy from "@/components/graph/ProjectGalaxy";
 import { SidebarContext } from "@/components/layout/AppShell";
 
-interface GraphPageProps {
-  projectPath: string;
-}
+interface GraphPageProps { projectPath: string; }
 
 export function GraphPage({ projectPath }: GraphPageProps) {
   const { collapsed } = useContext(SidebarContext);
