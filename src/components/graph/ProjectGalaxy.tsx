@@ -110,6 +110,17 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   useBloom(fgRef, settings.bloomStrength);
 
+  // Loading timeout — if scan takes >15s, show something
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
+  useEffect(() => {
+    if (loading) {
+      const t = setTimeout(() => setLoadTimedOut(true), 15000);
+      return () => clearTimeout(t);
+    } else {
+      setLoadTimedOut(false);
+    }
+  }, [loading]);
+
   // ── Dynamic bounds for adaptive camera ──
   const bounds = useMemo(() => computeBounds(data), [data]);
   // Camera distance: enough to see the whole galaxy comfortably
@@ -187,7 +198,17 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           onNodeClick={(n:any)=>setSelected(n as FGNode)} onBackgroundClick={()=>setSelected(null)} enableNodeDrag />
       ) : (
         <div className="flex flex-col items-center justify-center h-full gap-4" style={{ color: clr.ui.muted, fontSize: 13 }}>
-          {loading ? <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: isDark?"rgba(100,96,255,0.15)":"rgba(0,0,0,0.1)", borderTopColor: isDark?"#8880ff":"#6366f1" }} /> : t("app.noData")}
+          {loading ? (
+            <>
+              <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: isDark?"rgba(100,96,255,0.15)":"rgba(0,0,0,0.1)", borderTopColor: isDark?"#8880ff":"#6366f1" }} />
+              <p>{loadTimedOut ? "Still scanning... large project?" : t("app.scanning")}</p>
+            </>
+          ) : (
+            <>
+              <p style={{ fontWeight: 600 }}>{t("app.noData")}</p>
+              <p style={{ fontSize: 12, opacity: 0.6 }}>Project: {projectPath}</p>
+            </>
+          )}
         </div>
       )}
       {/* Title */}
