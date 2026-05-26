@@ -1,6 +1,5 @@
-// Project selector — co-theme design system
+// Project selector — Obsidian-inspired co-theme
 // Layout/spacing: Tailwind. Colors/effects: co-* CSS classes.
-// No framer-motion; animated with co-animate-* CSS classes.
 
 import { useState } from "react";
 import {
@@ -54,15 +53,18 @@ export function ProjectSelector({
   const { theme, setTheme } = useTheme();
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--co-bg)" }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ background: "var(--co-bg)" }}
+    >
       {/* ════════════════════════════════════════════
           Left Sidebar
           ════════════════════════════════════════════ */}
-      <aside className="co-sidebar co-animate-fade-in-left relative w-[220px] shrink-0 flex flex-col">
+      <aside className="co-sidebar co-animate-fade-in-left relative w-[200px] shrink-0 flex flex-col">
         {/* Branding */}
         <div className="co-sidebar-brand">
           <div className="co-sidebar-brand-icon">
-            <Telescope size={16} strokeWidth={2} color="white" />
+            <Telescope size={15} strokeWidth={2} color="white" />
           </div>
           <span className="co-sidebar-brand-text">CodeObservatory</span>
         </div>
@@ -77,7 +79,7 @@ export function ProjectSelector({
             )}
           >
             {activeNav === "projects" && <span className="co-nav-indicator" />}
-            <FolderOpen size={16} className="shrink-0" />
+            <FolderOpen size={15} className="shrink-0" />
             Projects
           </button>
 
@@ -89,7 +91,7 @@ export function ProjectSelector({
             )}
           >
             {activeNav === "settings" && <span className="co-nav-indicator" />}
-            <Settings size={16} className="shrink-0" />
+            <Settings size={15} className="shrink-0" />
             Settings
           </button>
         </nav>
@@ -111,49 +113,55 @@ export function ProjectSelector({
           </h1>
 
           {activeNav === "projects" && (
-            <Button
+            <button
               onClick={() => onOpenProject()}
               disabled={isInitializing}
-              size="sm"
+              className="co-btn-outline"
+              style={{ padding: "6px 14px", fontSize: "12px" }}
             >
               {isInitializing ? (
                 <>
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={13} className="animate-spin" />
                   Initializing...
                 </>
               ) : (
                 <>
-                  <Plus size={14} />
-                  Open Project Directory
+                  <Plus size={13} />
+                  Open
                 </>
               )}
-            </Button>
+            </button>
           )}
         </div>
 
-        <hr className="co-separator mx-8" />
+        <hr className="co-separator mx-7" />
 
         {/* Content */}
         <div
-          className="flex-1 overflow-y-auto px-8 py-6"
-          style={{ scrollbarColor: "var(--co-border-light) transparent" }}
+          className="flex-1 overflow-y-auto px-7 py-5"
+          style={{
+            scrollbarColor: "var(--co-border-light) transparent",
+          }}
         >
           {activeNav === "projects" && (
             <div className="co-animate-fade-in">
               {recentProjects.length > 0 ? (
                 <div className="max-w-3xl">
                   {/* Section header */}
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex items-center gap-2 mb-3">
                     <span className="co-badge co-badge-secondary h-5 w-5 flex items-center justify-center p-0 text-[10px] font-bold">
                       {recentProjects.length}
                     </span>
-                    <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--co-text-muted)" }}>
+                    <span
+                      className="text-[10px] font-semibold uppercase tracking-wider"
+                      style={{ color: "var(--co-text-muted)" }}
+                    >
                       Recent Projects
                     </span>
                   </div>
 
-                  {/* Project list with stagger animation */}
-                  <div className="co-stagger space-y-1.5">
+                  {/* Project list */}
+                  <div className="co-stagger space-y-1">
                     {recentProjects.map((proj, i) => (
                       <button
                         key={proj.path}
@@ -165,10 +173,9 @@ export function ProjectSelector({
                           hoveredIndex === i && "co-project-card-active"
                         )}
                       >
-                        {/* Folder icon */}
                         <div className="co-project-icon">
                           <FolderOpen
-                            size={18}
+                            size={16}
                             color={
                               hoveredIndex === i
                                 ? "var(--co-accent)"
@@ -177,7 +184,6 @@ export function ProjectSelector({
                           />
                         </div>
 
-                        {/* Project info */}
                         <div className="min-w-0 flex-1">
                           <p className="co-project-name truncate">
                             {proj.name}
@@ -187,13 +193,14 @@ export function ProjectSelector({
                           </p>
                         </div>
 
-                        {/* Timestamp */}
                         <span className="co-project-time">
                           {formatLastOpened(proj.lastOpened)}
                         </span>
 
-                        {/* Chevron */}
-                        <ChevronRight size={16} className="co-project-chevron" />
+                        <ChevronRight
+                          size={14}
+                          className="co-project-chevron"
+                        />
                       </button>
                     ))}
                   </div>
@@ -203,7 +210,7 @@ export function ProjectSelector({
                 <div className="co-animate-fade-in co-empty-state">
                   <div className="co-empty-icon">
                     <FolderSearch
-                      size={36}
+                      size={32}
                       color="var(--co-text-muted)"
                       strokeWidth={1.5}
                     />
@@ -217,11 +224,13 @@ export function ProjectSelector({
           )}
 
           {activeNav === "settings" && (
-            <div className="co-animate-fade-in py-6 max-w-lg">
+            <div className="co-animate-fade-in py-5 max-w-lg">
               <div className="co-card">
                 <div className="co-card-header">
                   <h3 className="co-card-title">Appearance</h3>
-                  <p className="co-card-desc">Choose your preferred theme</p>
+                  <p className="co-card-desc">
+                    Choose your preferred theme
+                  </p>
                 </div>
                 <div className="co-card-content">
                   <div
@@ -241,14 +250,11 @@ export function ProjectSelector({
                       )}
                       style={
                         theme === "dark"
-                          ? {
-                              background:
-                                "linear-gradient(135deg, var(--co-primary), #7c3aed)",
-                            }
+                          ? { background: "var(--co-primary)" }
                           : { background: "transparent" }
                       }
                     >
-                      <Moon size={16} />
+                      <Moon size={15} />
                       Dark
                     </button>
                     <button
@@ -261,14 +267,11 @@ export function ProjectSelector({
                       )}
                       style={
                         theme === "light"
-                          ? {
-                              background:
-                                "linear-gradient(135deg, var(--co-primary), #7c3aed)",
-                            }
+                          ? { background: "var(--co-primary)" }
                           : { background: "transparent" }
                       }
                     >
-                      <Sun size={16} />
+                      <Sun size={15} />
                       Light
                     </button>
                   </div>
