@@ -180,9 +180,9 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           backgroundColor={clr.bg} showNavInfo={false}
           cameraPosition={camPos}
           nodeThreeObject={nodeObj} nodeVal={(n:any) => (n as FGNode).val}
-          linkWidth={0.3} linkColor={() => `rgba(${isDark ? "99,102,241" : "100,116,139"},${settings.edgeOpacity})`}
-          linkDirectionalParticles={2} linkDirectionalParticleSpeed={0.003} linkDirectionalParticleWidth={1.2}
-          linkDirectionalParticleColor={() => clr.particle}
+          linkWidth={0.2} linkColor={() => `rgba(${isDark ? "136,128,255" : "99,102,241"},${settings.edgeOpacity * 0.6})`}
+          linkDirectionalParticles={4} linkDirectionalParticleSpeed={0.002} linkDirectionalParticleWidth={2}
+          linkDirectionalParticleColor={() => isDark ? "#c4b5fd" : "#818cf8"}
           d3VelocityDecay={0.3} d3AlphaDecay={0.015} cooldownTicks={250}
           d3Force={(engine:any)=>{const d3=(window as any).d3;if(!d3)return;if(engine.force){engine.force("charge",d3.forceManyBody?.()?.strength(settings.chargeStrength));engine.force("link",d3.forceLink?.()?.distance(settings.linkDistance)?.strength(settings.linkStrength));engine.force("center",d3.forceCenter?.()?.strength(settings.centerGravity));}}}
           onNodeClick={(n:any)=>setSelected(n as FGNode)} onBackgroundClick={()=>setSelected(null)} enableNodeDrag />
