@@ -78,7 +78,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:1.3, edgeOpacity:0.12, bloomStrength:2.5, chargeStrength:-60, linkDistance:14, linkStrength:0.4, centerGravity:0.2 };
+const DEFS: GalaxySettings = { nodeSize:0.8, edgeOpacity:0.10, bloomStrength:2.5, chargeStrength:-200, linkDistance:8, linkStrength:0.5, centerGravity:0.5 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -139,7 +139,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   // 3D node
   const nodeObj = useCallback((node: any) => {
     const n = node as FGNode; const g = new THREE.Group();
-    const r = n.type === "root" ? 2.0 : n.type === "dir" ? 0.8 : 0.35;
+    const r = n.type === "root" ? 1.2 : n.type === "dir" ? 0.4 : 0.15;
     const s = r * settings.nodeSize; const segs = n.type === "file" ? 8 : 24;
     const geo = new THREE.SphereGeometry(s, segs, segs);
     const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 4.0 : n.type === "dir" ? 1.8 : 1.0, roughness: 0.15, metalness: 0.03, toneMapped: false });
