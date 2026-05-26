@@ -50,7 +50,7 @@ function toFGData(nodes: FileNode[], edges: FileEdge[], isDark: boolean) {
   return {
     nodes: nodes.map(n => {
       const isR = n.id === root?.id; const d = depth.get(n.id) ?? 99; const ex = n.extension?.toLowerCase() ?? "";
-      return { id: n.id, name: n.label, path: n.path, type: isR ? "root" : n.kind === "dir" ? "dir" : "file", color: isR ? clr.root : n.kind === "dir" ? (d===1 ? clr.dirCyan : clr.dirPurple) : (clr.file[ex] || clr.defaultFile), val: isR ? 12 : n.kind === "dir" ? (d===1 ? 6 : 4) : 2, extension: n.extension, size: n.size } as FGNode;
+      return { id: n.id, name: n.label, path: n.path, type: isR ? "root" : n.kind === "dir" ? "dir" : "file", color: isR ? clr.root : n.kind === "dir" ? (d===1 ? clr.dirCyan : clr.dirPurple) : (clr.file[ex] || clr.defaultFile), val: isR ? 16 : n.kind === "dir" ? (d===1 ? 8 : 5) : 3, extension: n.extension, size: n.size } as FGNode;
     }),
     links: edges.map(e => ({ source: e.source, target: e.target } as FGLink)),
   };
@@ -78,7 +78,7 @@ function useBloom(fgRef: React.RefObject<ForceGraphMethods|undefined>, strength:
 
 // ═══════════ Main ═══════════
 interface GalaxySettings { nodeSize: number; edgeOpacity: number; bloomStrength: number; chargeStrength: number; linkDistance: number; linkStrength: number; centerGravity: number; }
-const DEFS: GalaxySettings = { nodeSize:1, edgeOpacity:0.15, bloomStrength:2.0, chargeStrength:-120, linkDistance:18, linkStrength:0.35, centerGravity:0.15 };
+const DEFS: GalaxySettings = { nodeSize:1.3, edgeOpacity:0.12, bloomStrength:2.0, chargeStrength:-60, linkDistance:14, linkStrength:0.4, centerGravity:0.2 };
 
 interface Props { projectPath: string; fullscreen?: boolean; }
 
@@ -126,19 +126,20 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     fg.zoomToFit?.(600, 80);
   }, []);
 
-  // Auto-refocus on root when settings change (avoid losing galaxy)
+  // Auto-refocus only when force params change (not bloom/nodeSize)
   useEffect(() => {
     const fg: any = fgRef.current;
     if (!fg || !data.nodes.length) return;
-    // Small delay to let force simulation settle after settings change
-    const t = setTimeout(() => fg.zoomToFit?.(400, 60), 500);
+    const t = setTimeout(() => fg.zoomToFit?.(400, 60), 600);
     return () => clearTimeout(t);
-  }, [settings, data.nodes.length]);
+    // Only depend on force-affecting params, not bloom/nodeSize
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.chargeStrength, settings.linkDistance, settings.linkStrength, settings.centerGravity, data.nodes.length]);
 
   // 3D node
   const nodeObj = useCallback((node: any) => {
     const n = node as FGNode; const g = new THREE.Group();
-    const r = n.type === "root" ? 1.4 : n.type === "dir" ? 0.6 : 0.25;
+    const r = n.type === "root" ? 2.0 : n.type === "dir" ? 0.8 : 0.35;
     const s = r * settings.nodeSize; const segs = n.type === "file" ? 8 : 24;
     const geo = new THREE.SphereGeometry(s, segs, segs);
     const mat = new THREE.MeshStandardMaterial({ color: n.color, emissive: n.color, emissiveIntensity: n.type === "root" ? 3.0 : n.type === "dir" ? 1.5 : 0.9, roughness: 0.2, metalness: 0.05 });

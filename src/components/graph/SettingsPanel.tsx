@@ -243,7 +243,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       label={t("settings.nodeSize")}
                       value={settings.nodeSize}
                       min={0.3}
-                      max={3}
+                      max={5}
                       step={0.1}
                       onChange={(v) => set("nodeSize", v)}
                       unit="×"
@@ -275,7 +275,7 @@ export function SettingsPanel({ open, onClose, settings, onChange }: Props) {
                       label={t("settings.charge")}
                       value={settings.chargeStrength}
                       min={-500}
-                      max={-20}
+                      max={-10}
                       step={10}
                       onChange={(v) => set("chargeStrength", v)}
                       isDark={isDark}
