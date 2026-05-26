@@ -2,7 +2,6 @@
 // Guaranteed rendering on Windows with dark/light theme support
 
 import { type ReactNode, createContext, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/hooks/useTheme";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -37,11 +36,9 @@ export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, 
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
           <TopBar projectName={projectName} watcherRunning={watcherRunning} collapsed={collapsed} onExpand={() => setCollapsed(false)} />
           <main style={{ flex: 1, overflow: "hidden", background: isDark ? "#05050f" : "#f0f0f5" }}>
-            <AnimatePresence mode="wait">
-              <motion.div key={activeTab} initial={{ opacity: 0, scale: 0.995 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.995 }} transition={{ duration: 0.15 }} style={{ height: "100%" }}>
-                {children}
-              </motion.div>
-            </AnimatePresence>
+            <div style={{ height: "100%" }}>
+              {children}
+            </div>
           </main>
         </div>
       </div>

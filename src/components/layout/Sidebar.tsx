@@ -1,6 +1,5 @@
-// Sidebar — 100% inline styles, dual theme, framer-motion width animation
+// Sidebar — 100% inline styles, dual theme, CSS transition width animation
 
-import { motion } from "framer-motion";
 import { Telescope, LayoutDashboard, GitBranch, Share2, PanelRight } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
@@ -39,10 +38,10 @@ export function Sidebar({ activeTab, onTabChange, collapsed, onToggle }: Sidebar
   };
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 0 : 200 }}
-      transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
+    <aside
       style={{
+        width: collapsed ? 0 : 200,
+        transition: "width 0.2s ease",
         display: "flex", flexDirection: "column", height: "100%",
         overflow: "hidden", flexShrink: 0,
         background: s.bg,
@@ -105,6 +104,6 @@ export function Sidebar({ activeTab, onTabChange, collapsed, onToggle }: Sidebar
           <PanelRight size={13} />
         </button>
       </div>
-    </motion.aside>
+    </aside>
   );
 }
