@@ -9,6 +9,7 @@ import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
+import { forceSimulation, forceManyBody, forceLink, forceCenter } from "d3-force-3d";
 import { useScanGraph } from "@/hooks/useObservatory";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
@@ -306,7 +307,6 @@ function computeSphericalLayout(
       // Normalize parent position direction for outward push
       const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
       const nx = parentPos[0] / pDist;
-      const ny = parentPos[1] / pDist;
       const nz = parentPos[2] / pDist;
       const ext = (node.extension || "").toLowerCase();
       const sn: SphericalNode = {
@@ -694,14 +694,9 @@ const DEFS: GalaxySettings = {
   edgeOpacity: 0.05,
   bloomStrength: 0.5,
   chargeStrength: -200,
-  linkDistance: 8,
+  linkDistance: 20,
   linkStrength: 0.4,
-  centerGravity: 0.5,
-};
-  chargeStrength: -400,
-  linkDistance: 4,
-  linkStrength: 0.7,
-  centerGravity: 1.0,
+  centerGravity: 0.1,
 };
 
 // ══════════════════════════════════════════════════════════
@@ -741,14 +736,76 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // Compute spherical layout from graph
-  const layout = useMemo(
-    () =>
-      graph
-        ? computeSphericalLayout(graph.nodes, graph.edges, isDark)
-        : { nodes: [], edges: [] },
-    [graph, isDark],
-  );
+  // Compute spherical layout + d3-force-3d simulation from graph
+  const layout = useMemo(() => {
+    if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
+
+    const initial = computeSphericalLayout(graph.nodes, graph.edges, isDark);
+    if (initial.nodes.length <= 1) return initial;
+
+    // Build force-simulation nodes from initial Fibonacci-sphere positions
+    const forceNodes = initial.nodes.map((n) => ({
+      x: n.x,
+      y: n.y,
+      z: n.z,
+      fx: n.type === "root" ? 0 : (undefined as number | undefined),
+      fy: n.type === "root" ? 0 : (undefined as number | undefined),
+      fz: n.type === "root" ? 0 : (undefined as number | undefined),
+    }));
+
+    // Build link references by node id → array index
+    const idToIdx = new Map(initial.nodes.map((n, i) => [n.id, i]));
+    const forceLinks = initial.edges
+      .filter((e) => idToIdx.has(e.from.id) && idToIdx.has(e.to.id))
+      .map((e) => ({
+        source: idToIdx.get(e.from.id)!,
+        target: idToIdx.get(e.to.id)!,
+      }));
+
+    if (forceLinks.length > 0) {
+      const sim = forceSimulation(forceNodes, 3)
+        .force("charge", forceManyBody().strength(settings.chargeStrength))
+        .force(
+          "link",
+          forceLink(forceLinks)
+            .distance(settings.linkDistance)
+            .strength(settings.linkStrength),
+        )
+        .force(
+          "center",
+          forceCenter(0, 0, 0).strength(settings.centerGravity),
+        )
+        .stop();
+
+      // Run 300 ticks synchronously (no animation — instant layout)
+      for (let i = 0; i < 300; i++) sim.tick();
+    }
+
+    // Copy force-sim positions back onto new SphericalNode objects
+    const resultNodes: SphericalNode[] = initial.nodes.map((n, i) => ({
+      ...n,
+      x: forceNodes[i].x,
+      y: forceNodes[i].y,
+      z: forceNodes[i].z,
+    }));
+
+    // Rebuild edges so they reference the new node objects
+    const nodeMap = new Map(resultNodes.map((n) => [n.id, n]));
+    const resultEdges: SphericalEdge[] = initial.edges.map((e) => ({
+      ...e,
+      from: nodeMap.get(e.from.id)!,
+      to: nodeMap.get(e.to.id)!,
+    }));
+
+    return { nodes: resultNodes, edges: resultEdges };
+  }, [
+    graph,
+    isDark,
+    settings.chargeStrength,
+    settings.linkDistance,
+    settings.linkStrength,
+    settings.centerGravity,
+  ]);
 
   // Selected node data
   const selectedNode = useMemo(
