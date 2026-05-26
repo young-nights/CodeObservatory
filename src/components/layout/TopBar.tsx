@@ -27,7 +27,7 @@ export function TopBar({
   const textDim = isDark ? "#52525b" : "#a1a1aa";
   const textMuted = isDark ? "#71717a" : "#52525b";
   const textSecondary = isDark ? "#a1a1aa" : "#3f3f46";
-  const textPrimary = isDark ? "#d4d4d8" : "#18181b";
+  const textPrimary = isDark ? "#fafafa" : "#18181b";
   const textPlaceholder = isDark ? "#52525b" : "#a1a1aa";
   const hoverBg = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)";
   const chevronColor = isDark ? "#3f3f46" : "#d4d4d8";
