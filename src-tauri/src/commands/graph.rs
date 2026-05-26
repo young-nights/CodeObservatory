@@ -352,6 +352,8 @@ pub fn build_graph(project_path: String) -> Result<GraphData, String> {
             extension: None,
             size: None,
             modified: None,
+            has_children: None,
+            truncated: None,
         });
     }
 
