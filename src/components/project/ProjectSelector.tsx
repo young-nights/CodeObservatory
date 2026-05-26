@@ -1,23 +1,13 @@
-// ProjectSelector — Precision Instrument
-// No glassmorphism · color hierarchy · outline buttons · underline hover
+// ProjectSelector — Theme-aware, inline styles, proper hierarchy
+// Android Studio-style two-column: left nav + right content
 
 import { useState } from "react";
-import {
-  FolderOpen,
-  Plus,
-  Loader2,
-  Telescope,
-  ChevronRight,
-  FolderSearch,
-  Settings,
-  Moon,
-  Sun,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { FolderOpen, Plus, Loader2, Telescope, ChevronRight, FolderSearch, Settings, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useTranslation } from "react-i18next";
 import type { ProjectConfig } from "@/lib/types";
 
-interface ProjectSelectorProps {
+interface Props {
   recentProjects: ProjectConfig[];
   isInitializing: boolean;
   onOpenProject: (path?: string) => void;
@@ -26,292 +16,150 @@ interface ProjectSelectorProps {
 
 type NavItem = "projects" | "settings";
 
-function formatLastOpened(iso: string): string {
-  const now = Date.now();
-  const then = new Date(iso).getTime();
-  const diffMs = now - then;
-  const diffMins = Math.floor(diffMs / 60_000);
-  const diffHours = Math.floor(diffMs / 3_600_000);
-  const diffDays = Math.floor(diffMs / 86_400_000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
+function fmtTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  if (d < 7) return `${d}d ago`;
   return new Date(iso).toLocaleDateString();
 }
 
-export function ProjectSelector({
-  recentProjects,
-  isInitializing,
-  onOpenProject,
-  onSelectRecent,
-}: ProjectSelectorProps) {
-  const [activeNav, setActiveNav] = useState<NavItem>("projects");
+export function ProjectSelector({ recentProjects, isInitializing, onOpenProject, onSelectRecent }: Props) {
+  const [nav, setNav] = useState<NavItem>("projects");
+  const [hovered, setHovered] = useState<number | null>(null);
   const { theme, toggle } = useTheme();
+  const { t } = useTranslation();
   const isDark = theme === "dark";
 
+  const c = {
+    bg: isDark ? "#08080c" : "#f5f5f7",
+    sidebarBg: isDark ? "#0c0c10" : "#fafafa",
+    sidebarBorder: isDark ? "#1c1c24" : "#e5e7eb",
+    text: isDark ? "#fafafa" : "#18181b",
+    textDim: isDark ? "#a1a1aa" : "#71717a",
+    textMuted: isDark ? "#71717a" : "#9ca3af",
+    accent: "#06b6d4",
+    accentBg: isDark ? "rgba(6,182,212,0.08)" : "rgba(6,182,212,0.1)",
+    hoverBg: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.04)",
+    navText: isDark ? "#a1a1aa" : "#6b7280",
+    navActive: isDark ? "#fafafa" : "#111827",
+    cardBg: isDark ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)",
+    cardBorder: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+    cardHoverBg: isDark ? "rgba(6,182,212,0.06)" : "rgba(6,182,212,0.08)",
+    btnGrad: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
+    version: isDark ? "#3f3f46" : "#d1d5db",
+  };
+
   return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ background: "var(--co-bg)" }}
-    >
-      {/* ── Sidebar: 200px ── */}
-      <aside className="co-sidebar co-animate-fade-in-left shrink-0 flex flex-col">
-        {/* Brand — serif */}
-        <div className="co-sidebar-brand">
-          <div className="co-sidebar-brand-icon">
-            <Telescope size={15} strokeWidth={2} />
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: c.bg }}>
+      {/* ── Left sidebar ── */}
+      <aside style={{ width: 200, display: "flex", flexDirection: "column", flexShrink: 0, background: c.sidebarBg, borderRight: `1px solid ${c.sidebarBorder}` }}>
+        {/* Brand */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: 52, borderBottom: `1px solid ${c.sidebarBorder}` }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: c.btnGrad, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Telescope size={14} color="white" strokeWidth={2.5} />
           </div>
-          <span className="co-sidebar-brand-text">CodeObservatory</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: c.text, fontFamily: "system-ui, sans-serif" }}>CodeObservatory</span>
         </div>
 
-        {/* Separator */}
-        <div className="co-sidebar-separator" />
-
-        {/* Navigation */}
-        <nav className="co-sidebar-nav">
-          <button
-            onClick={() => setActiveNav("projects")}
-            className={cn(
-              "co-nav-item",
-              activeNav === "projects" && "co-nav-item-active"
-            )}
-          >
-            {activeNav === "projects" && <span className="co-nav-indicator" />}
-            <FolderOpen size={14} className="shrink-0" />
-            Projects
-          </button>
-          <button
-            onClick={() => setActiveNav("settings")}
-            className={cn(
-              "co-nav-item",
-              activeNav === "settings" && "co-nav-item-active"
-            )}
-          >
-            {activeNav === "settings" && <span className="co-nav-indicator" />}
-            <Settings size={14} className="shrink-0" />
-            Settings
-          </button>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: "6px 6px", display: "flex", flexDirection: "column", gap: 2 }}>
+          {([{ id: "projects", icon: FolderOpen, label: "Projects" }, { id: "settings", icon: Settings, label: "Settings" }] as const).map(item => {
+            const Icon = item.icon;
+            const active = nav === item.id;
+            return (
+              <button key={item.id} onClick={() => setNav(item.id)}
+                style={{ display: "flex", alignItems: "center", gap: 10, height: 34, padding: "0 10px", borderRadius: 6, border: "none", cursor: "pointer", position: "relative", fontSize: 13, fontWeight: 500, textAlign: "left" as const, width: "100%", color: active ? c.navActive : c.navText, background: active ? c.accentBg : "transparent", fontFamily: "system-ui, sans-serif", transition: "all 0.12s ease" }}
+                onMouseEnter={e => { if (!active) { e.currentTarget.style.color = c.textDim; e.currentTarget.style.background = c.hoverBg; } }}
+                onMouseLeave={e => { if (!active) { e.currentTarget.style.color = c.navText; e.currentTarget.style.background = "transparent"; } }}
+              >
+                {active && <span style={{ position: "absolute", left: 0, top: 7, bottom: 7, width: 2, borderRadius: "0 2px 2px 0", background: c.accent }} />}
+                <Icon size={14} color={active ? c.accent : isDark ? "#52525b" : "#9ca3af"} />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
-        {/* Version */}
-        <div className="co-sidebar-footer">
-          <span className="co-sidebar-version">v0.1.0</span>
+        {/* Footer */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", height: 40, borderTop: `1px solid ${c.sidebarBorder}` }}>
+          <span style={{ fontSize: 10, color: c.version, fontFamily: "system-ui, sans-serif" }}>v0.1.0</span>
+          <button onClick={toggle}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, borderRadius: 6, border: "none", cursor: "pointer", background: "transparent", color: isDark ? "#71717a" : "#9ca3af", transition: "all 0.12s ease" }}
+            onMouseEnter={e => { e.currentTarget.style.color = isDark ? "#a1a1aa" : "#4b5563"; e.currentTarget.style.background = c.hoverBg; }}
+            onMouseLeave={e => { e.currentTarget.style.color = isDark ? "#71717a" : "#9ca3af"; e.currentTarget.style.background = "transparent"; }}
+          >
+            {isDark ? <Sun size={13} /> : <Moon size={13} />}
+          </button>
         </div>
       </aside>
 
-      {/* ── Main Content ── */}
-      <main className="co-animate-fade-in flex-1 flex flex-col min-w-0 overflow-hidden">
+      {/* ── Right content ── */}
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Header */}
-        <div className="co-section-header">
-          <h1 className="co-section-title">
-            {activeNav === "projects" ? "Projects" : "Settings"}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "28px 32px 16px" }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: c.text, fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
+            {nav === "projects" ? "Projects" : "Settings"}
           </h1>
-
-          {activeNav === "projects" && (
-            <button
-              onClick={() => onOpenProject()}
-              disabled={isInitializing}
-              className="co-project-open-btn"
+          {nav === "projects" && (
+            <button onClick={() => onOpenProject()} disabled={isInitializing}
+              style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 18px", borderRadius: 9, border: "none", cursor: isInitializing ? "not-allowed" : "pointer", fontSize: 13, fontWeight: 600, color: "white", background: c.btnGrad, opacity: isInitializing ? 0.5 : 1, transition: "all 0.15s ease", fontFamily: "system-ui, sans-serif" }}
+              onMouseEnter={e => { if (!isInitializing) e.currentTarget.style.opacity = "0.85"; }}
+              onMouseLeave={e => { if (!isInitializing) e.currentTarget.style.opacity = "1"; }}
             >
-              {isInitializing ? (
-                <>
-                  <Loader2 size={13} className="animate-spin" />
-                  Initializing...
-                </>
-              ) : (
-                <>
-                  <Plus size={13} />
-                  Open
-                </>
-              )}
+              {isInitializing ? <><Loader2 size={13} className="animate-spin" /> {t("project.initializing")}</> : <><Plus size={13} /> {t("project.openProject")}</>}
             </button>
           )}
         </div>
 
-        <hr className="co-separator" style={{ margin: "0 var(--co-space-6)" }} />
+        <div style={{ padding: "0 32px" }}><hr style={{ border: "none", borderTop: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }} /></div>
 
-        {/* Content area */}
-        <div
-          className="flex-1 overflow-y-auto"
-          style={{
-            padding: "var(--co-space-5) var(--co-space-6)",
-            scrollbarColor: "var(--co-border) transparent",
-          }}
-        >
-          {activeNav === "projects" && (
-            <div className="co-animate-fade-in">
-              {recentProjects.length > 0 ? (
-                <div style={{ maxWidth: 640 }}>
-                  {/* Section label — 10px uppercase */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "var(--co-space-2)",
-                      marginBottom: "var(--co-space-3)",
-                    }}
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 32px 32px" }}>
+          {nav === "projects" && (
+            recentProjects.length > 0 ? (
+              <div style={{ maxWidth: 700 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 5, fontSize: 11, fontWeight: 700, background: c.accentBg, color: c.accent }}>
+                    {recentProjects.length}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    {t("project.recentProjects")}
+                  </span>
+                </div>
+
+                {recentProjects.map((proj, i) => (
+                  <div key={proj.path} onClick={() => onSelectRecent(proj.path)}
+                    onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
+                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, cursor: "pointer", marginBottom: 4, border: `1px solid ${hovered === i ? (isDark ? "rgba(6,182,212,0.2)" : "rgba(6,182,212,0.15)") : "transparent"}`, background: hovered === i ? c.cardHoverBg : c.cardBg, transition: "all 0.12s ease" }}
                   >
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        minWidth: 20,
-                        height: 20,
-                        borderRadius: 4,
-                        fontSize: "var(--co-font-size-2xs)",
-                        fontWeight: "var(--co-font-weight-semibold)",
-                        background: "var(--co-accent-subtle)",
-                        color: "var(--co-accent-text)",
-                      }}
-                    >
-                      {recentProjects.length}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "var(--co-font-size-2xs)",
-                        fontWeight: "var(--co-font-weight-semibold)",
-                        textTransform: "uppercase",
-                        letterSpacing: "var(--co-letter-spacing-label)",
-                        color: "var(--co-text-muted)",
-                      }}
-                    >
-                      Recent Projects
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 9, background: hovered === i ? "rgba(6,182,212,0.15)" : (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"), flexShrink: 0, transition: "background 0.12s ease" }}>
+                      <FolderOpen size={16} color={hovered === i ? "#06b6d4" : isDark ? "#a1a1aa" : "#71717a"} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.name}</div>
+                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.path}</div>
+                    </div>
+                    <span style={{ fontSize: 12, color: isDark ? "#71717a" : "#9ca3af", flexShrink: 0, fontVariantNumeric: "tabular-nums" as const }}>{fmtTime(proj.lastOpened)}</span>
+                    <ChevronRight size={14} color={hovered === i ? c.accent : (isDark ? "#52525b" : "#d1d5db")} style={{ flexShrink: 0, transition: "all 0.12s ease", transform: hovered === i ? "translateX(2px)" : "none" }} />
                   </div>
-
-                  {/* Project list — hover translateX(2px) */}
-                  <div
-                    className="co-stagger"
-                    style={{ display: "flex", flexDirection: "column", gap: "var(--co-space-2)" }}
-                  >
-                    {recentProjects.map((proj) => (
-                      <button
-                        key={proj.path}
-                        onClick={() => onSelectRecent(proj.path)}
-                        className="co-project-card"
-                      >
-                        <div className="co-project-icon">
-                          <FolderOpen
-                            size={18}
-                            style={{ color: "var(--co-text-muted)" }}
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p className="co-project-name truncate">
-                            {proj.name}
-                          </p>
-                          <p className="co-project-path truncate">
-                            {proj.path}
-                          </p>
-                        </div>
-
-                        <span className="co-project-time">
-                          {formatLastOpened(proj.lastOpened)}
-                        </span>
-
-                        <ChevronRight
-                          size={14}
-                          className="co-project-chevron"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                /* Empty state */
-                <div
-                  className="co-animate-fade-in co-empty-state"
-                  style={{ height: "auto", paddingTop: "var(--co-space-10)" }}
-                >
-                  <div className="co-empty-icon">
-                    <FolderSearch
-                      size={28}
-                      strokeWidth={1.5}
-                      style={{ color: "var(--co-text-muted)" }}
-                    />
-                  </div>
-                  <p className="co-empty-text">
-                    Select your first project to start tracking code changes
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeNav === "settings" && (
-            <div className="co-animate-fade-in" style={{ maxWidth: 420 }}>
-              <div className="co-card" style={{ marginTop: "var(--co-space-2)" }}>
-                <div className="co-card-header">
-                  <h3 className="co-card-title">Appearance</h3>
-                  <p className="co-card-desc">Choose your preferred theme</p>
-                </div>
-                <div className="co-card-content">
-                  <div
-                    style={{
-                      display: "inline-flex",
-                      borderRadius: "var(--co-radius-sm)",
-                      border: "1px solid var(--co-border)",
-                      padding: 3,
-                      background: "var(--co-bg-sidebar)",
-                    }}
-                  >
-                    <button
-                      onClick={toggle}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--co-space-2)",
-                        padding: "6px 14px",
-                        borderRadius: "var(--co-radius-sm)",
-                        fontSize: "var(--co-font-size-sm)",
-                        fontWeight: "var(--co-font-weight-medium)",
-                        border: "none",
-                        cursor: "pointer",
-                        background:
-                          isDark ? "var(--co-accent)" : "transparent",
-                        color:
-                          isDark
-                            ? "#ffffff"
-                            : "var(--co-text-muted)",
-                        transition: "background var(--co-duration-fast) var(--co-ease-out)",
-                      }}
-                    >
-                      <Moon size={14} />
-                      Dark
-                    </button>
-                    <button
-                      onClick={toggle}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "var(--co-space-2)",
-                        padding: "6px 14px",
-                        borderRadius: "var(--co-radius-sm)",
-                        fontSize: "var(--co-font-size-sm)",
-                        fontWeight: "var(--co-font-weight-medium)",
-                        border: "none",
-                        cursor: "pointer",
-                        background:
-                          !isDark
-                            ? "var(--co-accent)"
-                            : "transparent",
-                        color:
-                          !isDark
-                            ? "#ffffff"
-                            : "var(--co-text-muted)",
-                        transition: "background var(--co-duration-fast) var(--co-ease-out)",
-                      }}
-                    >
-                      <Sun size={14} />
-                      Light
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", maxWidth: 320, margin: "0 auto", textAlign: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 72, height: 72, borderRadius: 16, background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)", border: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}`, marginBottom: 16 }}>
+                  <FolderSearch size={32} color={isDark ? "#71717a" : "#9ca3af"} strokeWidth={1.5} />
+                </div>
+                <p style={{ fontSize: 14, color: c.textMuted, lineHeight: 1.6 }}>{t("project.selectFirst")}</p>
+              </div>
+            )
+          )}
+          {nav === "settings" && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12 }}>
+              <Settings size={44} color={isDark ? "#52525b" : "#d1d5db"} strokeWidth={1} />
+              <p style={{ fontSize: 14, color: c.textMuted }}>Settings coming soon</p>
             </div>
           )}
         </div>
