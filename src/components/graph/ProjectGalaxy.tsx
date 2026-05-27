@@ -651,6 +651,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             transparent
             opacity={edgeAlpha * 0.8}
             depthWrite={false}
+            blending={THREE.AdditiveBlending}
           />
         </lineSegments>
       )}
@@ -714,6 +715,10 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             toneMapped={false}
             emissive={new THREE.Color("#80b0ff")}
             emissiveIntensity={2}
+            transparent
+            opacity={0.9}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
         </instancedMesh>
       )}
@@ -722,7 +727,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
       {hovered && (
         <mesh position={hovered.position}>
           <sphereGeometry args={[1.5 * settings.nodeSize, 16, 16]} />
-          <meshBasicMaterial color="white" transparent opacity={0.25} depthWrite={false} />
+          <meshBasicMaterial color="white" transparent opacity={0.25} depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
       )}
 
@@ -743,20 +748,24 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
               roughness={0.05}
               metalness={0.02}
               toneMapped={false}
+              transparent
+              opacity={0.95}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
             />
           </mesh>
           {/* 3 translucent halo spheres */}
           <mesh>
             <sphereGeometry args={[3.5 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[0]} transparent opacity={0.12} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[0]} transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
           <mesh>
             <sphereGeometry args={[5.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[1]} transparent opacity={0.06} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[1]} transparent opacity={0.06} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
           <mesh>
             <sphereGeometry args={[7.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[2]} transparent opacity={0.03} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[2]} transparent opacity={0.03} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
         </group>
       )}
