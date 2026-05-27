@@ -93,6 +93,8 @@ interface SphericalEdge {
   from: SphericalNode;
   to: SphericalNode;
   color: string;
+  /** Number of leaf file descendants under the source node; drives silk-bundle density. */
+  childrenCount?: number;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -191,6 +193,34 @@ function computeSphericalLayout(
         queue.push(ch);
       }
     }
+  }
+
+  // Build leaf & childrenCount maps for silk-bundle density
+  const sourceSetForLeaves = new Set(edges.map((e) => e.source));
+  const leafIds = new Set<string>();
+  for (const n of nodes) {
+    if (!sourceSetForLeaves.has(n.id) && n.id !== root.id && depthMap.has(n.id)) {
+      leafIds.add(n.id);
+    }
+  }
+  const childrenCountMap = new Map<string, number>();
+  function countLeaves(nodeId: string): number {
+    if (childrenCountMap.has(nodeId)) return childrenCountMap.get(nodeId)!;
+    const ch = children.get(nodeId) || [];
+    let total = 0;
+    for (const cid of ch) {
+      if (leafIds.has(cid)) {
+        total += 1;
+      } else {
+        total += countLeaves(cid);
+      }
+    }
+    childrenCountMap.set(nodeId, total);
+    return total;
+  }
+  countLeaves(root.id);
+  for (const nodeId of children.keys()) {
+    countLeaves(nodeId);
   }
 
   const sphericalNodes = new Map<string, SphericalNode>();
@@ -309,15 +339,20 @@ function computeSphericalLayout(
       const nx = parentPos[0] / pDist;
       const nz = parentPos[2] / pDist;
       const ext = (node.extension || "").toLowerCase();
+      const starDepth = depthMap.get(node.id) ?? 2;
+      // Extra random jitter for outer file nodes (deeper orbits → more scatter)
+      const jitterX = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
+      const jitterY = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
+      const jitterZ = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
-        x: parentPos[0] + ox + nx * pushR * 0.3,
-        y: parentPos[1] + oy,
-        z: parentPos[2] + oz + nz * pushR * 0.3 + (Math.random() - 0.5) * 20,
+        x: parentPos[0] + ox + nx * pushR * 0.3 + jitterX,
+        y: parentPos[1] + oy + jitterY,
+        z: parentPos[2] + oz + nz * pushR * 0.3 + (Math.random() - 0.5) * 20 + jitterZ,
         extension: node.extension, size: node.size,
-        depth: depthMap.get(node.id) ?? 2,
+        depth: starDepth,
       };
       sphericalNodes.set(node.id, sn);
       resultNodes.push(sn);
@@ -349,7 +384,7 @@ function computeSphericalLayout(
     }
   }
 
-  // Build edges: color by source depth
+  // Build edges: color by source depth, store childrenCount for silk-bundle density
   const resultEdges: SphericalEdge[] = [];
   for (const e of edges) {
     const from = sphericalNodes.get(e.source);
@@ -358,7 +393,16 @@ function computeSphericalLayout(
     const color = from.depth === 0 ? clr.edgeRoot
       : from.depth === 1 ? clr.edgeDir
       : clr.edgeFile;
-    resultEdges.push({ from, to, color });
+    const cc = childrenCountMap.get(e.source) ?? 0;
+    resultEdges.push({ from, to, color, childrenCount: cc });
+  }
+
+  // Root-to-file edges: connect root to every file (star) node — radiating filaments
+  const rootSN_forEdge = sphericalNodes.get(root.id)!;
+  for (const sn of resultNodes) {
+    if (sn.type === "star") {
+      resultEdges.push({ from: rootSN_forEdge, to: sn, color: "#c8d0ff", childrenCount: 0 });
+    }
   }
 
   return { nodes: resultNodes, edges: resultEdges };
@@ -476,23 +520,43 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     return new Float32Array(dusts.flatMap(() => [c.r, c.g, c.b]));
   }, [dusts, clr.dust]);
 
-  // ── ArcEdges: 3D Bezier arcs merged into single LineSegments buffer ──
-  const arcGeometry = useMemo(() => {
-    const positions: number[] = [];
-    const colors: number[] = [];
+  // ── ArcEdges: filament-style glowing white edges with distance gradient,
+  //   silk-bundle parallel offsets, split near/far for blending ──
+  const { nearArcGeometry, farArcGeometry } = useMemo(() => {
+    const nearPositions: number[] = [];
+    const nearColors: number[] = [];
+    const farPositions: number[] = [];
+    const farColors: number[] = [];
+
+    // Map midpoint distance to filament color (blue-white core → grey-white outskirts)
+    function filament(dist: number): { hex: string; bright: number } {
+      if (dist < 50) {
+        return { hex: "#e0e8ff", bright: 0.30 + (dist / 50) * 0.05 }; // 0.30–0.35
+      } else if (dist < 150) {
+        const t = (dist - 50) / 100;
+        return { hex: "#c0c8e0", bright: 0.25 - t * 0.10 }; // 0.25 → 0.15
+      } else {
+        const t = Math.min((dist - 150) / 130, 1);
+        return { hex: "#a0a0c0", bright: 0.12 - t * 0.06 }; // 0.12 → 0.06
+      }
+    }
 
     for (const edge of layout.edges) {
       const from = new THREE.Vector3(edge.from.x, edge.from.y, edge.from.z);
       const to = new THREE.Vector3(edge.to.x, edge.to.y, edge.to.z);
       const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5);
       const dist = mid.length();
+      const isNear = dist < 80;
+
+      // Filament color & brightness from distance
+      const { hex, bright } = filament(dist);
+      const baseColor = new THREE.Color(hex).multiplyScalar(bright);
 
       // Control point: push midpoint outward by distance * 0.4
       let control: THREE.Vector3;
       if (dist > 0.01) {
         control = mid.clone().add(mid.clone().normalize().multiplyScalar(dist * 0.4));
       } else {
-        // Fallback for co-located nodes
         control = new THREE.Vector3(
           (from.x + to.x) / 2,
           (from.y + to.y) / 2 + 15,
@@ -500,23 +564,64 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         );
       }
 
-      const curve = new THREE.QuadraticBezierCurve3(from, control, to);
-      const pts = curve.getPoints(24); // more segments for longer 3D arcs
-      const col = new THREE.Color(edge.color);
-      for (let i = 0; i < pts.length - 1; i++) {
-        positions.push(pts[i].x, pts[i].y, pts[i].z);
-        positions.push(pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
-        colors.push(col.r, col.g, col.b);
-        colors.push(col.r, col.g, col.b);
+      // Silk bundle: parallel offset curves for dense folders (childrenCount > 10)
+      const cc = edge.childrenCount ?? 0;
+      const numExtra = cc > 10 ? 2 : 0;
+      const offsetMag = Math.min(cc / 5, 3);
+
+      // Perpendicular direction for offset (cross with up vector, or X as fallback)
+      const edgeDir = new THREE.Vector3().subVectors(to, from).normalize();
+      let perp: THREE.Vector3;
+      if (Math.abs(edgeDir.y) < 0.9) {
+        perp = new THREE.Vector3().crossVectors(edgeDir, new THREE.Vector3(0, 1, 0)).normalize();
+      } else {
+        perp = new THREE.Vector3().crossVectors(edgeDir, new THREE.Vector3(1, 0, 0)).normalize();
+      }
+
+      // Offsets: 0 (main strand), +offset, -offset
+      const offsets = [0];
+      for (let oi = 0; oi < numExtra; oi++) {
+        offsets.push(offsetMag * (oi + 1) / numExtra);
+        offsets.push(-offsetMag * (oi + 1) / numExtra);
+      }
+
+      for (const off of offsets) {
+        const offVec = perp.clone().multiplyScalar(off);
+        const fOff = from.clone().add(offVec);
+        const tOff = to.clone().add(offVec);
+        const cOff = control.clone().add(offVec);
+
+        const curve = new THREE.QuadraticBezierCurve3(fOff, cOff, tOff);
+        const pts = curve.getPoints(24);
+        // Offset strands are fainter than the main filament
+        const mult = off === 0 ? 1.0 : 0.45;
+        const col = baseColor.clone().multiplyScalar(mult);
+
+        const targetPositions = isNear ? nearPositions : farPositions;
+        const targetColors = isNear ? nearColors : farColors;
+
+        for (let i = 0; i < pts.length - 1; i++) {
+          targetPositions.push(pts[i].x, pts[i].y, pts[i].z);
+          targetPositions.push(pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
+          targetColors.push(col.r, col.g, col.b);
+          targetColors.push(col.r, col.g, col.b);
+        }
       }
     }
 
-    const geo = new THREE.BufferGeometry();
-    if (positions.length > 0) {
-      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
-      geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+    const nearGeo = new THREE.BufferGeometry();
+    if (nearPositions.length > 0) {
+      nearGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(nearPositions), 3));
+      nearGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(nearColors), 3));
     }
-    return geo;
+
+    const farGeo = new THREE.BufferGeometry();
+    if (farPositions.length > 0) {
+      farGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(farPositions), 3));
+      farGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(farColors), 3));
+    }
+
+    return { nearArcGeometry: nearGeo, farArcGeometry: farGeo };
   }, [layout.edges]);
 
   // ── Planet instance transforms ──
@@ -621,13 +726,26 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         maxPolarAngle={Math.PI * 0.85}
       />
 
-      {/* ── ArcEdges: 3D Bezier arcs (vertexColor by source depth) ── */}
-      {arcGeometry.attributes.position?.count > 0 && (
-        <lineSegments geometry={arcGeometry}>
+      {/* ── Near arc segments (dist < 80): AdditiveBlending for core glow ── */}
+      {nearArcGeometry.attributes.position?.count > 0 && (
+        <lineSegments geometry={nearArcGeometry}>
           <lineBasicMaterial
             vertexColors
             transparent
             opacity={edgeAlpha}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </lineSegments>
+      )}
+
+      {/* ── Far arc segments (dist >= 80): NormalBlending for solid filament tails ── */}
+      {farArcGeometry.attributes.position?.count > 0 && (
+        <lineSegments geometry={farArcGeometry}>
+          <lineBasicMaterial
+            vertexColors
+            transparent
+            opacity={edgeAlpha * 0.8}
             depthWrite={false}
           />
         </lineSegments>
