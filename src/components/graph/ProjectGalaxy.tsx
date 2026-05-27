@@ -150,10 +150,12 @@ function computeGalaxyLayout(
     const curDepth = depthMap.get(cur)!;
     for (const ch of children.get(cur) || []) {
       if (!depthMap.has(ch)) {
+        const childNode = nodes.find((n) => n.id === ch);
+        if (!childNode) continue;
         depthMap.set(ch, curDepth + 1);
         parentMap.set(ch, cur);
         const list = nodesByDepth.get(curDepth + 1) || [];
-        list.push(nodes.find((n) => n.id === ch)!);
+        list.push(childNode);
         nodesByDepth.set(curDepth + 1, list);
         queue.push(ch);
       }
