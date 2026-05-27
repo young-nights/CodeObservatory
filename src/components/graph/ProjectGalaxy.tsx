@@ -1,8 +1,8 @@
-// ProjectGalaxy — 3D Spherical Particle Galaxy (R3F)
+// ProjectGalaxy — 3D Force-Directed Volumetric Cloud Galaxy (R3F)
 // Layout: RootStar → InstancedMesh(dirs) → Points(files) → Points(dust)
 // Bezier arc edges + InstancedMesh + Points + Bloom
 // Full dark/light theme support via useTheme()
-// Uses Fibonacci sphere for uniform spherical distribution
+// Hybrid: volumetric random init + d3-force-3d simulation (single layout, no toggle)
 
 import { useRef, useCallback, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
@@ -73,7 +73,7 @@ const LIGHT = {
 };
 
 // ══════════════════════════════════════════════════════════
-// SPHERICAL LAYOUT TYPES
+// GALAXY NODE TYPES
 // ══════════════════════════════════════════════════════════
 interface SphericalNode {
   id: string;
@@ -98,44 +98,7 @@ interface SphericalEdge {
 }
 
 // ══════════════════════════════════════════════════════════
-// SHELL CONFIG
-// ══════════════════════════════════════════════════════════
-const SHELL = {
-  dir1Inner: 50,
-  dir1Outer: 70,
-  dir2Inner: 90,
-  dir2Outer: 120,
-  fileInner: 140,
-  fileOuter: 180,
-  dustMin: 200,
-  dustMax: 280,
-};
-
-// ══════════════════════════════════════════════════════════
-// FIBONACCI SPHERE
-// ══════════════════════════════════════════════════════════
-function fibonacciSphere(
-  n: number,
-  radius: number,
-  center: [number, number, number] = [0, 0, 0],
-): [number, number, number][] {
-  const points: [number, number, number][] = [];
-  const phi = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < n; i++) {
-    const y = 1 - (i / Math.max(n - 1, 1)) * 2;
-    const r = Math.sqrt(1 - y * y);
-    const theta = phi * i;
-    points.push([
-      center[0] + radius * r * Math.cos(theta),
-      center[1] + radius * y,
-      center[2] + radius * r * Math.sin(theta),
-    ]);
-  }
-  return points;
-}
-
-// ══════════════════════════════════════════════════════════
-// RANDOM ON SPHERE
+// RANDOM ON SPHERE — 3D direction with uniform distribution
 // ══════════════════════════════════════════════════════════
 function randomOnSphere(radius: number, center: [number, number, number] = [0, 0, 0]): [number, number, number] {
   const u = Math.random();
@@ -150,21 +113,22 @@ function randomOnSphere(radius: number, center: [number, number, number] = [0, 0
 }
 
 // ══════════════════════════════════════════════════════════
-// SPHERICAL LAYOUT COMPUTATION
+// GALAXY LAYOUT — volumetric random init + d3-force-3d
+// Replaces old Sphere/Force dual-mode with a single hybrid
+// layout that produces organic cloud-cluster distributions.
 // ══════════════════════════════════════════════════════════
-function computeSphericalLayout(
+function computeGalaxyLayout(
   nodes: FileNode[],
   edges: FileEdge[],
   isDark: boolean,
 ): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
   const clr = isDark ? DARK : LIGHT;
 
-  // Find root (node with no incoming edges)
+  // ── 1. Find root & build graph structures ──
   const targeted = new Set(edges.map((e) => e.target));
   const root = nodes.find((n) => !targeted.has(n.id));
   if (!root) return { nodes: [], edges: [] };
 
-  // Build adjacency
   const children = new Map<string, string[]>();
   for (const e of edges) {
     const list = children.get(e.source) || [];
@@ -172,7 +136,6 @@ function computeSphericalLayout(
     children.set(e.source, list);
   }
 
-  // BFS depth assignment
   const depthMap = new Map<string, number>();
   const nodesByDepth = new Map<number, FileNode[]>();
   const parentMap = new Map<string, string>();
@@ -195,7 +158,7 @@ function computeSphericalLayout(
     }
   }
 
-  // Build leaf & childrenCount maps for silk-bundle density
+  // ── 2. Build leaf & childrenCount maps ──
   const sourceSetForLeaves = new Set(edges.map((e) => e.source));
   const leafIds = new Set<string>();
   for (const n of nodes) {
@@ -219,97 +182,61 @@ function computeSphericalLayout(
     return total;
   }
   countLeaves(root.id);
-  for (const nodeId of children.keys()) {
-    countLeaves(nodeId);
-  }
+  for (const nodeId of children.keys()) countLeaves(nodeId);
 
+  // ── 3. Volumetric random initial placement ──
   const sphericalNodes = new Map<string, SphericalNode>();
   const resultNodes: SphericalNode[] = [];
 
-  // Shell 0: root at (0, 0, 0)
+  // Root fixed at origin
   const rootSN: SphericalNode = {
-    id: root.id,
-    name: root.label,
-    path: root.path,
-    type: "root",
-    color: clr.root,
-    x: 0, y: 0, z: 0,
-    depth: 0,
+    id: root.id, name: root.label, path: root.path,
+    type: "root", color: clr.root,
+    x: 0, y: 0, z: 0, depth: 0,
   };
   sphericalNodes.set(root.id, rootSN);
   resultNodes.push(rootSN);
 
-  // Shell 1: depth-1 dirs, Fibonacci sphere at varying radii (50-70)
+  // ── 3a. Depth-1 folders: random inside sphere radius 15-45 ──
   const depth1 = nodesByDepth.get(1) || [];
-  const d1Count = depth1.length || 1;
-  if (depth1.length > 0) {
-    const shell1Radius = SHELL.dir1Inner + Math.random() * (SHELL.dir1Outer - SHELL.dir1Inner);
-    const fiboPoints = fibonacciSphere(d1Count, shell1Radius);
-    depth1.forEach((node, i) => {
-      const [x, y, z] = fiboPoints[i % fiboPoints.length];
-      const jitterZ = (Math.random() - 0.5) * 20;
-      const sn: SphericalNode = {
-        id: node.id, name: node.label, path: node.path,
-        type: "planet",
-        color: i % 2 === 0 ? clr.dir1 : clr.dir2,
-        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
-        depth: 1,
-      };
-      sphericalNodes.set(node.id, sn);
-      resultNodes.push(sn);
-    });
+  for (const node of depth1) {
+    const r = 15 + Math.random() * 30; // 15–45
+    const [x, y, z] = randomOnSphere(r);
+    const sn: SphericalNode = {
+      id: node.id, name: node.label, path: node.path,
+      type: "planet",
+      color: Math.random() < 0.5 ? clr.dir1 : clr.dir2,
+      x, y, z, depth: 1,
+    };
+    sphericalNodes.set(node.id, sn);
+    resultNodes.push(sn);
   }
 
-  // Shell 2: depth-2+ dirs, middle shell (90-120)
-  const depth2 = nodesByDepth.get(2) || [];
-  if (depth2.length > 0) {
-    const shell2Radius = SHELL.dir2Inner + Math.random() * (SHELL.dir2Outer - SHELL.dir2Inner);
-    const fiboPoints2 = fibonacciSphere(depth2.length, shell2Radius);
-    depth2.forEach((node, i) => {
-      const [x, y, z] = fiboPoints2[i];
-      const jitterZ = (Math.random() - 0.5) * 20;
-      const sn: SphericalNode = {
-        id: node.id, name: node.label, path: node.path,
-        type: "planet",
-        color: clr.dir2,
-        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
-        depth: 2,
-      };
-      sphericalNodes.set(node.id, sn);
-      resultNodes.push(sn);
-    });
-  }
-
-  // Collect all deeper dirs (depth 3+) as "planet" too — middle shell
-  for (let d = 3; d <= 10; d++) {
+  // ── 3b. Depth-2+ folders: progressively larger random spheres ──
+  for (let d = 2; d <= 10; d++) {
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
-    // deeper dirs pushed a bit outward
-    const r = SHELL.dir2Outer + (d - 2) * 10;
-    const fiboPoints = fibonacciSphere(layer.length, r);
-    layer.forEach((node, i) => {
-      const [x, y, z] = fiboPoints[i % fiboPoints.length];
-      const jitterZ = (Math.random() - 0.5) * 20;
+    const rMin = 30 + (d - 2) * 8;
+    const rMax = 70 + (d - 2) * 10;
+    for (const node of layer) {
+      const r = rMin + Math.random() * (rMax - rMin);
+      const [x, y, z] = randomOnSphere(r);
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
-        type: "planet",
-        color: clr.dir2,
-        x, y: y + (Math.random() - 0.5) * 8, z: z + jitterZ,
-        depth: d,
+        type: "planet", color: clr.dir2,
+        x, y, z, depth: d,
       };
       sphericalNodes.set(node.id, sn);
       resultNodes.push(sn);
-    });
+    }
   }
 
-  // Shell 3: file nodes (leaves with extensions) — outer shell 140-180 around parents
-  // Find all leaf nodes (nodes that are not sources of any edge)
+  // ── 3c. File (star) nodes: clustered near parent with outward push ──
   const sourceSet = new Set(edges.map((e) => e.source));
   const leafNodes = nodes.filter(
     (n) => !sourceSet.has(n.id) && n.id !== root.id && depthMap.has(n.id),
   );
 
-  // Group file nodes by parent
   const filesByParent = new Map<string, FileNode[]>();
   for (const fn of leafNodes) {
     const p = parentMap.get(fn.id);
@@ -320,37 +247,31 @@ function computeSphericalLayout(
     }
   }
 
-  const fileRadiusBase = SHELL.fileInner + Math.random() * (SHELL.fileOuter - SHELL.fileInner);
   for (const [parentId, childNodes] of filesByParent) {
     const parentSN = sphericalNodes.get(parentId);
     if (!parentSN) continue;
     const parentPos: [number, number, number] = [parentSN.x, parentSN.y, parentSN.z];
-    const count = childNodes.length || 1;
-    const offsetRadius = 8 + Math.random() * 6; // per-parent cluster spread
+    const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
+    const pnx = parentPos[0] / pDist;
+    const pnz = parentPos[2] / pDist;
+    const count = childNodes.length;
 
     childNodes.forEach((node, i) => {
-      // Spherical offset around parent position with sector constraint
-      const [ox, oy, oz] = randomOnSphere(offsetRadius);
-      // Blend: parent position + spherical offset + some fileRadius push outward
-      const pushFactor = (i / Math.max(count - 1, 1)) * 0.6 + 0.4; // 0.4-1.0
-      const pushR = fileRadiusBase * pushFactor + Math.random() * 10;
-      // Normalize parent position direction for outward push
-      const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
-      const nx = parentPos[0] / pDist;
-      const nz = parentPos[2] / pDist;
+      // Local cluster offset around parent (radius 8–25)
+      const localR = 8 + Math.random() * 17;
+      const [ox, oy, oz] = randomOnSphere(localR);
+      // Outward push factor: 0.3–1.0, total radius up to ~80
+      const pushFactor = count > 1 ? 0.3 + (i / (count - 1)) * 0.7 : 0.5;
+      const pushR = Math.min(30 + pushFactor * 50, 80);
       const ext = (node.extension || "").toLowerCase();
       const starDepth = depthMap.get(node.id) ?? 2;
-      // Extra random jitter for outer file nodes (deeper orbits → more scatter)
-      const jitterX = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
-      const jitterY = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
-      const jitterZ = starDepth >= 2 ? (Math.random() - 0.5) * 50 : 0;
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
-        x: parentPos[0] + ox + nx * pushR * 0.3 + jitterX,
-        y: parentPos[1] + oy + jitterY,
-        z: parentPos[2] + oz + nz * pushR * 0.3 + (Math.random() - 0.5) * 20 + jitterZ,
+        x: parentPos[0] + ox + pnx * pushR * 0.3,
+        y: parentPos[1] + oy + (Math.random() - 0.5) * 20,
+        z: parentPos[2] + oz + pnz * pushR * 0.3 + (Math.random() - 0.5) * 20,
         extension: node.extension, size: node.size,
         depth: starDepth,
       };
@@ -359,32 +280,81 @@ function computeSphericalLayout(
     });
   }
 
-  // Shell 4: dust (remaining deeper nodes that aren't dirs or leaves)
+  // ── 3d. Dust nodes: random in large sphere 50–150 ──
   const alreadyPlaced = new Set(sphericalNodes.keys());
   const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
-  if (remaining.length > 0) {
-    for (const node of remaining) {
-      const p = parentMap.get(node.id);
-      const paPos: [number, number, number] = p && sphericalNodes.get(p)
-        ? [sphericalNodes.get(p)!.x, sphericalNodes.get(p)!.y, sphericalNodes.get(p)!.z]
-        : [0, 0, 0];
-      const dustR = SHELL.dustMin + Math.random() * (SHELL.dustMax - SHELL.dustMin);
-      const [sx, sy, sz] = randomOnSphere(dustR);
-      const d = depthMap.get(node.id) ?? 99;
-      const sn: SphericalNode = {
-        id: node.id, name: node.label, path: node.path,
-        type: "dust", color: clr.dust,
-        x: paPos[0] * 0.3 + sx,
-        y: paPos[1] * 0.3 + sy,
-        z: paPos[2] * 0.3 + sz + (Math.random() - 0.5) * 30,
-        depth: d,
-      };
-      sphericalNodes.set(node.id, sn);
-      resultNodes.push(sn);
-    }
+  for (const node of remaining) {
+    const dustR = 50 + Math.random() * 100;
+    const [sx, sy, sz] = randomOnSphere(dustR);
+    const d = depthMap.get(node.id) ?? 99;
+    const sn: SphericalNode = {
+      id: node.id, name: node.label, path: node.path,
+      type: "dust", color: clr.dust,
+      x: sx, y: sy, z: sz,
+      depth: d,
+    };
+    sphericalNodes.set(node.id, sn);
+    resultNodes.push(sn);
   }
 
-  // Build edges: color by source depth, store childrenCount for silk-bundle density
+  // ── 4. Run d3-force-3d simulation on top of initial positions ──
+  if (resultNodes.length > 1) {
+    // Build force-simulation nodes (root fixed at origin)
+    const forceNodes = resultNodes.map((n) => ({
+      id: n.id,
+      x: n.x, y: n.y, z: n.z,
+      type: n.type,
+      fx: n.type === "root" ? 0 : (undefined as number | undefined),
+      fy: n.type === "root" ? 0 : (undefined as number | undefined),
+      fz: n.type === "root" ? 0 : (undefined as number | undefined),
+    }));
+
+    // Build link references by node id → array index
+    const idToIdx = new Map(resultNodes.map((n, i) => [n.id, i]));
+
+    // Only link parent-child edges (not the extra root-to-file edges)
+    const forceLinks: { source: number; target: number }[] = [];
+    for (const e of edges) {
+      const si = idToIdx.get(e.source);
+      const ti = idToIdx.get(e.target);
+      if (si !== undefined && ti !== undefined) {
+        forceLinks.push({ source: si, target: ti });
+      }
+    }
+
+    // Per-type charge: folders repel more than files to reduce crowding
+    const sim = forceSimulation(forceNodes, 3)
+      .force(
+        "charge",
+        forceManyBody().strength((d) => {
+          const t = (d as { type?: string }).type;
+          if (t === "planet") return -180;   // folders repel more
+          if (t === "star") return -100;      // files cluster tighter
+          return -120;                         // dust & others
+        }),
+      )
+      .force(
+        "link",
+        forceLink(forceLinks).distance(25).strength(0.3),
+      )
+      .force(
+        "center",
+        forceCenter(0, 0, 0).strength(0.03),
+      )
+      .stop();
+
+    // Run 500 ticks for convergence
+    for (let i = 0; i < 500; i++) sim.tick();
+
+    // Copy positions back
+    resultNodes.forEach((n, i) => {
+      n.x = forceNodes[i].x;
+      n.y = forceNodes[i].y;
+      n.z = forceNodes[i].z;
+    });
+  }
+
+  // ── 5. Build edges (same logic as before) ──
   const resultEdges: SphericalEdge[] = [];
   for (const e of edges) {
     const from = sphericalNodes.get(e.source);
@@ -397,7 +367,7 @@ function computeSphericalLayout(
     resultEdges.push({ from, to, color, childrenCount: cc });
   }
 
-  // Root-to-file edges: connect root to every file (star) node — radiating filaments
+  // Root-to-file edges: radiating filaments from center
   const rootSN_forEdge = sphericalNodes.get(root.id)!;
   for (const sn of resultNodes) {
     if (sn.type === "star") {
@@ -409,76 +379,10 @@ function computeSphericalLayout(
 }
 
 // ══════════════════════════════════════════════════════════
-// FORCE LAYOUT COMPUTATION (d3-force-3d)
-// ══════════════════════════════════════════════════════════
-function computeForceLayout(
-  initial: ReturnType<typeof computeSphericalLayout>,
-  settings: GalaxySettings,
-): ReturnType<typeof computeSphericalLayout> {
-  if (initial.nodes.length <= 1) return initial;
-
-  // Build force-simulation nodes from initial positions
-  const forceNodes = initial.nodes.map((n) => ({
-    x: n.x,
-    y: n.y,
-    z: n.z,
-    fx: n.type === "root" ? 0 : (undefined as number | undefined),
-    fy: n.type === "root" ? 0 : (undefined as number | undefined),
-    fz: n.type === "root" ? 0 : (undefined as number | undefined),
-  }));
-
-  // Build link references by node id → array index
-  const idToIdx = new Map(initial.nodes.map((n, i) => [n.id, i]));
-  const forceLinks = initial.edges
-    .filter((e) => idToIdx.has(e.from.id) && idToIdx.has(e.to.id))
-    .map((e) => ({
-      source: idToIdx.get(e.from.id)!,
-      target: idToIdx.get(e.to.id)!,
-    }));
-
-  if (forceLinks.length > 0) {
-    const sim = forceSimulation(forceNodes, 3)
-      .force("charge", forceManyBody().strength(settings.chargeStrength))
-      .force(
-        "link",
-        forceLink(forceLinks)
-          .distance(settings.linkDistance)
-          .strength(settings.linkStrength),
-      )
-      .force(
-        "center",
-        forceCenter(0, 0, 0).strength(settings.centerGravity),
-      )
-      .stop();
-
-    // Run 300 ticks synchronously (instant layout)
-    for (let i = 0; i < 300; i++) sim.tick();
-  }
-
-  // Copy force-sim positions back onto new SphericalNode objects
-  const resultNodes: SphericalNode[] = initial.nodes.map((n, i) => ({
-    ...n,
-    x: forceNodes[i].x,
-    y: forceNodes[i].y,
-    z: forceNodes[i].z,
-  }));
-
-  // Rebuild edges so they reference the new node objects
-  const nodeMap = new Map(resultNodes.map((n) => [n.id, n]));
-  const resultEdges: SphericalEdge[] = initial.edges.map((e) => ({
-    ...e,
-    from: nodeMap.get(e.from.id)!,
-    to: nodeMap.get(e.to.id)!,
-  }));
-
-  return { nodes: resultNodes, edges: resultEdges };
-}
-
-// ══════════════════════════════════════════════════════════
-// SCENE (inside Canvas)
+// SCENE (inside Canvas) — UNCHANGED from previous version
 // ══════════════════════════════════════════════════════════
 interface SceneProps {
-  layout: ReturnType<typeof computeSphericalLayout>;
+  layout: ReturnType<typeof computeGalaxyLayout>;
   settings: GalaxySettings;
   isDark: boolean;
   selectedId: string | null;
@@ -871,16 +775,16 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
 }
 
 // ══════════════════════════════════════════════════════════
-// DEFAULT SETTINGS
+// DEFAULT SETTINGS — tuned for hybrid force layout
 // ══════════════════════════════════════════════════════════
 const DEFS: GalaxySettings = {
   nodeSize: 1.2,
   edgeOpacity: 0.05,
   bloomStrength: 0.5,
-  chargeStrength: -200,
-  linkDistance: 20,
-  linkStrength: 0.4,
-  centerGravity: 0.1,
+  chargeStrength: -120,
+  linkDistance: 25,
+  linkStrength: 0.3,
+  centerGravity: 0.03,
 };
 
 // ══════════════════════════════════════════════════════════
@@ -900,7 +804,6 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<"sphere" | "force">("sphere");
   const [settings, setSettings] = useState<GalaxySettings>(DEFS);
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
@@ -921,15 +824,11 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // Compute layout (sphere or force) from graph
+  // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
   const layout = useMemo(() => {
     if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-    const initial = computeSphericalLayout(graph.nodes, graph.edges, isDark);
-    if (layoutMode === "force") {
-      return computeForceLayout(initial, settings);
-    }
-    return initial;
-  }, [graph, isDark, layoutMode, settings]);
+    return computeGalaxyLayout(graph.nodes, graph.edges, isDark);
+  }, [graph, isDark]);
 
   // Selected node data
   const selectedNode = useMemo(
@@ -1057,7 +956,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
         onClose={() => setPanelOpen(false)}
         settings={settings}
         onChange={setSettings}
-        layoutMode={layoutMode}
+        layoutMode="force"
       />
 
       {/* ── Selected node info card ── */}
@@ -1107,45 +1006,6 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
           </div>
         </div>
       )}
-
-      {/* ── Layout mode toggle (bottom center) ── */}
-      <div className="absolute bottom-0 left-0 right-0 flex justify-center pb-20 pointer-events-none z-20">
-        <div
-          className="flex gap-1 rounded-lg p-1 pointer-events-auto"
-          style={{ background: "rgba(0,0,0,0.5)" }}
-        >
-          <button
-            onClick={() => setLayoutMode("sphere")}
-            style={{
-              padding: "4px 12px",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              background: layoutMode === "sphere" ? "#06b6d4" : "transparent",
-              color: layoutMode === "sphere" ? "#fff" : "#888",
-            }}
-          >
-            Sphere
-          </button>
-          <button
-            onClick={() => setLayoutMode("force")}
-            style={{
-              padding: "4px 12px",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              background: layoutMode === "force" ? "#06b6d4" : "transparent",
-              color: layoutMode === "force" ? "#fff" : "#888",
-            }}
-          >
-            Force
-          </button>
-        </div>
-      </div>
 
       {/* ── HUD overlay (bottom bar) ── */}
       <div
