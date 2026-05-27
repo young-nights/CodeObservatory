@@ -230,7 +230,9 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
   const footerText = isDark ? "#52525b" : "#a1a1aa";
 
   const [panelExpanded, setPanelExpanded] = useState(true);
-  const set = (key: keyof GalaxySettings, val: number | string) =>
+  const setNum = (key: keyof GalaxySettings, val: number) =>
+    onChange({ ...settings, [key]: val });
+  const setStr = (key: keyof GalaxySettings, val: string) =>
     onChange({ ...settings, [key]: val });
 
   return (
@@ -298,7 +300,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={0.3}
                       max={5}
                       step={0.1}
-                      onChange={(v) => set("nodeSize", v)}
+                      onChange={(v) => setNum("nodeSize", v)}
                       unit="×"
                       isDark={isDark}
                     />
@@ -308,7 +310,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={0.02}
                       max={0.2}
                       step={0.01}
-                      onChange={(v) => set("edgeOpacity", v)}
+                      onChange={(v) => setNum("edgeOpacity", v)}
                       isDark={isDark}
                     />
                     <SliderControl
@@ -317,7 +319,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={0.1}
                       max={1.0}
                       step={0.1}
-                      onChange={(v) => set("bloomStrength", v)}
+                      onChange={(v) => setNum("bloomStrength", v)}
                       isDark={isDark}
                     />
                   </AccordionGroup>
@@ -331,7 +333,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
                         <button
                           key={key}
-                          onClick={() => set("colorPreset", key)}
+                          onClick={() => setStr("colorPreset", key)}
                           style={{
                             padding: "8px 6px",
                             borderRadius: 8,
@@ -373,7 +375,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={2}
                       max={8}
                       step={1}
-                      onChange={(v) => set("armCount", v)}
+                      onChange={(v) => setNum("armCount", v)}
                       isDark={isDark}
                     />
                     <SliderControl
@@ -382,7 +384,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={0.5}
                       max={2.0}
                       step={0.1}
-                      onChange={(v) => set("galaxyScale", v)}
+                      onChange={(v) => setNum("galaxyScale", v)}
                       isDark={isDark}
                     />
                     <SliderControl
@@ -391,7 +393,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       min={0.2}
                       max={2.0}
                       step={0.1}
-                      onChange={(v) => set("armCurvature", v)}
+                      onChange={(v) => setNum("armCurvature", v)}
                       isDark={isDark}
                     />
                   </AccordionGroup>
@@ -408,7 +410,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                         min={-1000}
                         max={0}
                         step={10}
-                        onChange={(v) => set("chargeStrength", v)}
+                        onChange={(v) => setNum("chargeStrength", v)}
                         isDark={isDark}
                       />
                       <SliderControl
@@ -417,7 +419,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                         min={5}
                         max={200}
                         step={5}
-                        onChange={(v) => set("linkDistance", v)}
+                        onChange={(v) => setNum("linkDistance", v)}
                         isDark={isDark}
                       />
                       <SliderControl
@@ -426,7 +428,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                         min={0}
                         max={1}
                         step={0.05}
-                        onChange={(v) => set("linkStrength", v)}
+                        onChange={(v) => setNum("linkStrength", v)}
                         isDark={isDark}
                       />
                       <SliderControl
@@ -435,7 +437,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                         min={0}
                         max={2}
                         step={0.05}
-                        onChange={(v) => set("centerGravity", v)}
+                        onChange={(v) => setNum("centerGravity", v)}
                         isDark={isDark}
                       />
                     </AccordionGroup>

@@ -998,14 +998,21 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     }
     // Validate every node has required id field
     const validNodes = graph.nodes.filter(n => n && typeof n.id === 'string');
-    const validEdges = graph.edges.filter(e => e && typeof e.source === 'string' && typeof e.target === 'string');
+    const validNodeIds = new Set(validNodes.map(n => n.id));
+    const validEdges = graph.edges.filter(e =>
+      e && typeof e.source === 'string' && typeof e.target === 'string' &&
+      validNodeIds.has(e.source) && validNodeIds.has(e.target)
+    );
     if (validNodes.length === 0) {
       console.warn("[ProjectGalaxy] No valid nodes in graph data", graph);
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
     }
-    return computeGalaxyLayout(validNodes, validEdges, isDark, settings);
+    console.log("[Galaxy] Computing layout:", { nodes: validNodes.length, edges: validEdges.length, preset: settings.colorPreset });
+    const result = computeGalaxyLayout(validNodes, validEdges, isDark, settings);
+    console.log("[Galaxy] Layout result:", { nodes: result.nodes.length, edges: result.edges.length });
+    return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, isDark, settings.armCount, settings.galaxyScale, settings.armCurvature, settings.linkDistance, settings.linkStrength, settings.centerGravity, settings.chargeStrength]);
+  }, [graph, isDark, settings.colorPreset, settings.armCount, settings.galaxyScale, settings.armCurvature, settings.linkDistance, settings.linkStrength, settings.centerGravity, settings.chargeStrength]);
 
   // Selected node data
   const selectedNode = useMemo(
