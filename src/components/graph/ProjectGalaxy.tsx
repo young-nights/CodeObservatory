@@ -200,7 +200,7 @@ function computeGalaxyLayout(
   // ── 3a. Depth-1 folders: random inside sphere radius 15-45 ──
   const depth1 = nodesByDepth.get(1) || [];
   for (const node of depth1) {
-    const r = 15 + Math.random() * 30; // 15–45
+    const r = 6 + Math.random() * 12; // 6–18
     const [x, y, z] = randomOnSphere(r);
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
@@ -216,8 +216,8 @@ function computeGalaxyLayout(
   for (let d = 2; d <= 10; d++) {
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
-    const rMin = 30 + (d - 2) * 8;
-    const rMax = 70 + (d - 2) * 10;
+    const rMin = 12 + (d - 2) * 4;
+    const rMax = 28 + (d - 2) * 5;
     for (const node of layer) {
       const r = rMin + Math.random() * (rMax - rMin);
       const [x, y, z] = randomOnSphere(r);
@@ -258,11 +258,11 @@ function computeGalaxyLayout(
 
     childNodes.forEach((node, i) => {
       // Local cluster offset around parent (radius 8–25)
-      const localR = 8 + Math.random() * 17;
+      const localR = 3 + Math.random() * 7;
       const [ox, oy, oz] = randomOnSphere(localR);
       // Outward push factor: 0.3–1.0, total radius up to ~80
       const pushFactor = count > 1 ? 0.3 + (i / (count - 1)) * 0.7 : 0.5;
-      const pushR = Math.min(30 + pushFactor * 50, 80);
+      const pushR = Math.min(12 + pushFactor * 20, 32);
       const ext = (node.extension || "").toLowerCase();
       const starDepth = depthMap.get(node.id) ?? 2;
       const sn: SphericalNode = {
@@ -270,8 +270,8 @@ function computeGalaxyLayout(
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
         x: parentPos[0] + ox + pnx * pushR * 0.3,
-        y: parentPos[1] + oy + (Math.random() - 0.5) * 20,
-        z: parentPos[2] + oz + pnz * pushR * 0.3 + (Math.random() - 0.5) * 20,
+        y: parentPos[1] + oy + (Math.random() - 0.5) * 6,
+        z: parentPos[2] + oz + pnz * pushR * 0.3 + (Math.random() - 0.5) * 6,
         extension: node.extension, size: node.size,
         depth: starDepth,
       };
@@ -284,7 +284,7 @@ function computeGalaxyLayout(
   const alreadyPlaced = new Set(sphericalNodes.keys());
   const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
   for (const node of remaining) {
-    const dustR = 50 + Math.random() * 100;
+    const dustR = 20 + Math.random() * 40;
     const [sx, sy, sz] = randomOnSphere(dustR);
     const d = depthMap.get(node.id) ?? 99;
     const sn: SphericalNode = {
@@ -328,18 +328,18 @@ function computeGalaxyLayout(
         "charge",
         forceManyBody().strength((d) => {
           const t = (d as { type?: string }).type;
-          if (t === "planet") return -180;   // folders repel more
-          if (t === "star") return -100;      // files cluster tighter
-          return -120;                         // dust & others
+          if (t === "planet") return -100;   // folders
+          if (t === "star") return -60;       // files cluster tighter
+          return -80;                          // dust & others
         }),
       )
       .force(
         "link",
-        forceLink(forceLinks).distance(25).strength(0.3),
+        forceLink(forceLinks).distance(12).strength(0.5),
       )
       .force(
         "center",
-        forceCenter(0, 0, 0).strength(0.03),
+        forceCenter(0, 0, 0).strength(0.08),
       )
       .stop();
 
@@ -781,10 +781,10 @@ const DEFS: GalaxySettings = {
   nodeSize: 1.2,
   edgeOpacity: 0.05,
   bloomStrength: 0.5,
-  chargeStrength: -120,
-  linkDistance: 25,
-  linkStrength: 0.3,
-  centerGravity: 0.03,
+  chargeStrength: -80,
+  linkDistance: 12,
+  linkStrength: 0.5,
+  centerGravity: 0.08,
 };
 
 // ══════════════════════════════════════════════════════════
