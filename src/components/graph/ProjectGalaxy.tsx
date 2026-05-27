@@ -113,9 +113,34 @@ function randomOnSphere(radius: number, center: [number, number, number] = [0, 0
 }
 
 // ══════════════════════════════════════════════════════════
-// GALAXY LAYOUT — volumetric random init + d3-force-3d
-// Replaces old Sphere/Force dual-mode with a single hybrid
-// layout that produces organic cloud-cluster distributions.
+// SPIRAL ARM POSITIONING — logarithmic spiral arm helpers
+// ══════════════════════════════════════════════════════════
+
+/** Logarithmic spiral: r = a * e^(b * theta) */
+function spiralPosition(
+  armIndex: number,
+  t: number,
+  armCount: number,
+  galaxyScale: number,
+  armCurvature: number,
+): [number, number, number] {
+  if (armCount <= 0) return [0, 0, 0];
+  const baseAngle = (2 * Math.PI * armIndex) / armCount;
+  const thetaMax = Math.PI * 4; // 2 full turns
+  const theta = t * thetaMax;
+  const r = 5 + galaxyScale * 40 * t * Math.exp(armCurvature * theta * 0.3);
+  const clampedR = Math.min(r, 200); // prevent extreme coordinates
+  const angle = baseAngle + theta;
+  return [
+    clampedR * Math.cos(angle),
+    (Math.random() - 0.5) * clampedR * 0.3,
+    clampedR * Math.sin(angle),
+  ];
+}
+
+
+// ══════════════════════════════════════════════════════════
+// GALAXY LAYOUT — spiral arm distribution + d3-force-3d
 // ══════════════════════════════════════════════════════════
 function computeGalaxyLayout(
   nodes: FileNode[],
@@ -198,9 +223,15 @@ function computeGalaxyLayout(
   countLeaves(root.id);
   for (const nodeId of children.keys()) countLeaves(nodeId);
 
-  // ── 3. Volumetric random initial placement ──
+  // Sanitize settings — use defaults if fields are missing (backward compat)
+  const armCount = settings.armCount ?? 5;
+  const galaxyScale = settings.galaxyScale ?? 1.0;
+  const armCurvature = settings.armCurvature ?? 0.6;
+
+  // ── 3. Spiral-arm initial placement ──
   const sphericalNodes = new Map<string, SphericalNode>();
   const resultNodes: SphericalNode[] = [];
+  const nodeArm = new Map<string, number>(); // node id → arm index
 
   // Root fixed at origin
   const rootSN: SphericalNode = {
@@ -211,11 +242,14 @@ function computeGalaxyLayout(
   sphericalNodes.set(root.id, rootSN);
   resultNodes.push(rootSN);
 
-  // ── 3a. Depth-1 folders: random inside sphere radius 15-45 ──
+  // ── 3a. Depth-1 folders: distributed along spiral arms, t = 0.1~0.4 ──
   const depth1 = nodesByDepth.get(1) || [];
-  for (const node of depth1) {
-    const r = 6 + Math.random() * 12; // 6–18
-    const [x, y, z] = randomOnSphere(r);
+  for (let i = 0; i < depth1.length; i++) {
+    const node = depth1[i];
+    if (!node) continue;
+    const arm = i % armCount;
+    const t = 0.1 + Math.random() * 0.3;
+    const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
       type: "planet",
@@ -223,24 +257,32 @@ function computeGalaxyLayout(
       x, y, z, depth: 1,
     };
     sphericalNodes.set(node.id, sn);
+    nodeArm.set(node.id, arm);
     resultNodes.push(sn);
   }
 
-  // ── 3b. Depth-2+ folders: progressively larger random spheres ──
+  // ── 3b. Depth-2+ folders: follow same arm as parent, t = 0.4~0.8 ──
   for (let d = 2; d <= 10; d++) {
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
-    const rMin = 12 + (d - 2) * 4;
-    const rMax = 28 + (d - 2) * 5;
     for (const node of layer) {
-      const r = rMin + Math.random() * (rMax - rMin);
-      const [x, y, z] = randomOnSphere(r);
+      if (!node) continue;
+      const pId = parentMap.get(node.id);
+      let arm: number;
+      if (pId && nodeArm.has(pId)) {
+        arm = nodeArm.get(pId)!;
+      } else {
+        arm = Math.floor(Math.random() * armCount);
+      }
+      const t = 0.4 + Math.random() * 0.4;
+      const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "planet", color: clr.dir2,
         x, y, z, depth: d,
       };
       sphericalNodes.set(node.id, sn);
+      nodeArm.set(node.id, arm);
       resultNodes.push(sn);
     }
   }
@@ -264,47 +306,48 @@ function computeGalaxyLayout(
   for (const [parentId, childNodes] of filesByParent) {
     const parentSN = sphericalNodes.get(parentId);
     if (!parentSN) continue;
-    const parentPos: [number, number, number] = [parentSN.x, parentSN.y, parentSN.z];
-    const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
-    const pnx = parentPos[0] / pDist;
-    const pnz = parentPos[2] / pDist;
-    const count = childNodes.length;
+    const parentArm = nodeArm.get(parentId) ?? 0;
+    const armAngle = (2 * Math.PI * parentArm) / armCount;
 
-    childNodes.forEach((node, i) => {
-      // Local cluster offset around parent (radius 8–25)
+    childNodes.forEach((node) => {
+      // Local cluster offset around parent (radius 3–10)
       const localR = 3 + Math.random() * 7;
       const [ox, oy, oz] = randomOnSphere(localR);
-      // Outward push factor: 0.3–1.0, total radius up to ~80
-      const pushFactor = count > 1 ? 0.3 + (i / (count - 1)) * 0.7 : 0.5;
-      const pushR = Math.min(12 + pushFactor * 20, 32);
+      // Small outward push along arm direction
+      const pushOut = 2 + Math.random() * 3;
+      const nx = Math.cos(armAngle);
+      const nz = Math.sin(armAngle);
       const ext = (node.extension || "").toLowerCase();
       const starDepth = depthMap.get(node.id) ?? 2;
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
-        x: parentPos[0] + ox + pnx * pushR * 0.3,
-        y: parentPos[1] + oy + (Math.random() - 0.5) * 6,
-        z: parentPos[2] + oz + pnz * pushR * 0.3 + (Math.random() - 0.5) * 6,
+        x: parentSN.x + ox + nx * pushOut,
+        y: parentSN.y + oy + (Math.random() - 0.5) * 16,
+        z: parentSN.z + oz + nz * pushOut,
         extension: node.extension, size: node.size,
         depth: starDepth,
       };
       sphericalNodes.set(node.id, sn);
+      nodeArm.set(node.id, parentArm);
       resultNodes.push(sn);
     });
   }
 
-  // ── 3d. Dust nodes: random in large sphere 50–150 ──
+  // ── 3d. Dust nodes: inter-arm space, radius 15–40 + height jitter ──
   const alreadyPlaced = new Set(sphericalNodes.keys());
   const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
   for (const node of remaining) {
-    const dustR = 20 + Math.random() * 40;
-    const [sx, sy, sz] = randomOnSphere(dustR);
+    const r = 15 + Math.random() * 25;
+    const angle = Math.random() * 2 * Math.PI;
     const d = depthMap.get(node.id) ?? 99;
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
       type: "dust", color: clr.dust,
-      x: sx, y: sy, z: sz,
+      x: r * Math.cos(angle),
+      y: (Math.random() - 0.5) * 30,
+      z: r * Math.sin(angle),
       depth: d,
     };
     sphericalNodes.set(node.id, sn);
