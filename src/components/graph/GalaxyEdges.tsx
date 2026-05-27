@@ -13,6 +13,8 @@ interface GalaxyEdgesProps {
 }
 
 export function GalaxyEdges({ edges, edgeOpacity }: GalaxyEdgesProps) {
+  if (!edges || edges.length === 0) return null;
+
   // ── Curved (same-arm) edges ──
   const curvedGeometry = useMemo(() => {
     const positions: number[] = [];
@@ -20,6 +22,8 @@ export function GalaxyEdges({ edges, edgeOpacity }: GalaxyEdgesProps) {
 
     for (const edge of edges) {
       if (!edge?.from || !edge?.to) continue;
+      if (typeof edge.from.x !== 'number' || typeof edge.from.z !== 'number') continue;
+      if (typeof edge.to.x !== 'number' || typeof edge.to.z !== 'number') continue;
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
       let angleDiff = Math.abs(fromAngle - toAngle);
@@ -83,6 +87,8 @@ export function GalaxyEdges({ edges, edgeOpacity }: GalaxyEdgesProps) {
 
     for (const edge of edges) {
       if (!edge?.from || !edge?.to) continue;
+      if (typeof edge.from.x !== 'number' || typeof edge.from.z !== 'number') continue;
+      if (typeof edge.to.x !== 'number' || typeof edge.to.z !== 'number') continue;
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
       let angleDiff = Math.abs(fromAngle - toAngle);

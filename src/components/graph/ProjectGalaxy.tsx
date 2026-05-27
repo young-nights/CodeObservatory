@@ -110,7 +110,10 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   // Selected node data
   const selectedNode = useMemo(
-    () => layout.nodes.find((n) => n.id === selectedId) ?? null,
+    () => {
+      if (!selectedId || !layout.nodes.length) return null;
+      return layout.nodes.find((n) => n && n.id === selectedId) ?? null;
+    },
     [layout.nodes, selectedId],
   );
 
