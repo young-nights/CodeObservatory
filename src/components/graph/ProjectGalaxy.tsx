@@ -503,6 +503,11 @@ interface SceneProps {
 }
 
 function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: SceneProps) {
+  // Safety: bail out if layout is empty or invalid
+  if (!layout || !layout.nodes || layout.nodes.length === 0) {
+    return null;
+  }
+
   const baseClr = isDark ? DARK : LIGHT;
   const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
   const clr = {
@@ -1035,6 +1040,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       {/* ── 3D Canvas or loading state ── */}
       {!loading && layout.nodes.length > 0 ? (
         <Canvas
+          key={`galaxy-${graph?.nodes?.length}-${settings.armCount}`}
           camera={{ position: [0, 0, 200], fov: 50, near: 0.1, far: 1000 }}
           gl={{ antialias: true, alpha: false }}
           style={{ width: canvasW, height: dim.h - 48 }}
