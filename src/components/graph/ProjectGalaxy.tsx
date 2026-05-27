@@ -156,6 +156,11 @@ function computeGalaxyLayout(
 ): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
   const clr = isDark ? DARK : LIGHT;
 
+  // Sanitize settings — use defaults if fields are missing (backward compat)
+  const armCount = settings.armCount ?? 5;
+  const galaxyScale = settings.galaxyScale ?? 1.0;
+  const armCurvature = settings.armCurvature ?? 0.6;
+
   // ── 1. Find root & build graph structures ──
   const targeted = new Set(edges.map((e) => e.target));
   const root = nodes.find((n) => !targeted.has(n.id));
@@ -237,9 +242,9 @@ function computeGalaxyLayout(
   for (let i = 0; i < depth1.length; i++) {
     const node = depth1[i];
     if (!node) continue;
-    const arm = i % settings.armCount;
+    const arm = i % armCount;
     const t = 0.1 + Math.random() * 0.3;
-    const [x, y, z] = spiralPosition(arm, t, settings.armCount, settings.galaxyScale, settings.armCurvature);
+    const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
       type: "planet",
@@ -262,10 +267,10 @@ function computeGalaxyLayout(
       if (pId && nodeArm.has(pId)) {
         arm = nodeArm.get(pId)!;
       } else {
-        arm = Math.floor(Math.random() * settings.armCount);
+        arm = Math.floor(Math.random() * armCount);
       }
       const t = 0.4 + Math.random() * 0.4;
-      const [x, y, z] = spiralPosition(arm, t, settings.armCount, settings.galaxyScale, settings.armCurvature);
+      const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "planet", color: clr.dir2,
@@ -297,7 +302,7 @@ function computeGalaxyLayout(
     const parentSN = sphericalNodes.get(parentId);
     if (!parentSN) continue;
     const parentArm = nodeArm.get(parentId) ?? 0;
-    const armAngle = (2 * Math.PI * parentArm) / settings.armCount;
+    const armAngle = (2 * Math.PI * parentArm) / armCount;
 
     childNodes.forEach((node) => {
       // Local cluster offset around parent (radius 3–10)
