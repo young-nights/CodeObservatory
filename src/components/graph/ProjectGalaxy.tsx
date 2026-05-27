@@ -236,6 +236,7 @@ function computeGalaxyLayout(
   const depth1 = nodesByDepth.get(1) || [];
   for (let i = 0; i < depth1.length; i++) {
     const node = depth1[i];
+    if (!node) continue;
     const arm = i % settings.armCount;
     const t = 0.1 + Math.random() * 0.3;
     const [x, y, z] = spiralPosition(arm, t, settings.armCount, settings.galaxyScale, settings.armCurvature);
@@ -255,6 +256,7 @@ function computeGalaxyLayout(
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
     for (const node of layer) {
+      if (!node) continue;
       const pId = parentMap.get(node.id);
       let arm: number;
       if (pId && nodeArm.has(pId)) {
@@ -936,8 +938,15 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
   // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
   const layout = useMemo(() => {
-    if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-    return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
+    if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+      return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
+    }
+    try {
+      return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
+    } catch (err) {
+      console.error("[ProjectGalaxy] computeGalaxyLayout failed:", err);
+      return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
+    }
   }, [graph, isDark, settings]);
 
   // Selected node data
