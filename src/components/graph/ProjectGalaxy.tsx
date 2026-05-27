@@ -13,7 +13,7 @@ import { forceSimulation, forceManyBody, forceLink, forceCenter } from "d3-force
 import { useScanGraph } from "@/hooks/useObservatory";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
-import { SettingsPanel, type GalaxySettings } from "./SettingsPanel";
+import { SettingsPanel, type GalaxySettings, COLOR_PRESETS } from "./SettingsPanel";
 import type { FileNode, FileEdge } from "@/lib/types";
 import { FolderOpen, File, Hash, Clock } from "lucide-react";
 
@@ -121,8 +121,22 @@ function computeGalaxyLayout(
   nodes: FileNode[],
   edges: FileEdge[],
   isDark: boolean,
+  settings: GalaxySettings,
 ): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
-  const clr = isDark ? DARK : LIGHT;
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  // Merge base theme colors with preset overrides
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
 
   // ── 1. Find root & build graph structures ──
   const targeted = new Set(edges.map((e) => e.target));
@@ -390,7 +404,19 @@ interface SceneProps {
 }
 
 function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: SceneProps) {
-  const clr = isDark ? DARK : LIGHT;
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const dustRef = useRef<THREE.Points>(null);
   const [hovered, setHovered] = useState<{ id: string; position: [number, number, number] } | null>(null);
@@ -813,11 +839,23 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   const { theme } = useTheme();
   const { t } = useTranslation();
   const isDark = theme === "dark";
-  const clr = isDark ? DARK : LIGHT;
-
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [settings, setSettings] = useState<GalaxySettings>(DEFS);
+
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
   // Loading timeout
@@ -840,7 +878,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
   const layout = useMemo(() => {
     if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-    return computeGalaxyLayout(graph.nodes, graph.edges, isDark);
+    return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
   }, [graph, isDark]);
 
   // Selected node data
