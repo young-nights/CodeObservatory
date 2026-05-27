@@ -87,6 +87,8 @@ interface SphericalNode {
   extension?: string;
   size?: number;
   depth: number;
+  /** Connectivity degree (in-edges + out-edges); computed post-layout */
+  degree?: number;
 }
 
 interface SphericalEdge {
@@ -409,6 +411,18 @@ function computeGalaxyLayout(
       n.y = forceNodes[i].y;
       n.z = forceNodes[i].z;
     });
+
+    // Compute degree for each node (in + out edges from force links)
+    const degreeMap = new Map<string, number>();
+    for (const link of forceLinks) {
+      const sid = forceNodes[link.source].id;
+      const tid = forceNodes[link.target].id;
+      degreeMap.set(sid, (degreeMap.get(sid) || 0) + 1);
+      degreeMap.set(tid, (degreeMap.get(tid) || 0) + 1);
+    }
+    for (const n of resultNodes) {
+      n.degree = degreeMap.get(n.id) || 0;
+    }
   }
 
   // ── 5. Build edges (same logic as before) ──
@@ -597,15 +611,18 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     return { nearArcGeometry: nearGeo, farArcGeometry: farGeo };
   }, [layout.edges]);
 
-  // ── Planet instance transforms ──
+  // ── Planet instance transforms (degree-based sizing) ──
   useEffect(() => {
     const mesh = planetRef.current;
     if (!mesh || planets.length === 0) return;
     const dummy = new THREE.Object3D();
     for (let i = 0; i < planets.length; i++) {
       const p = planets[i];
+      if (!p) continue;
       dummy.position.set(p.x, p.y, p.z);
-      const scale = (selectedId === p.id || hovered?.id === p.id) ? 1.6 : 1.0;
+      const degreeScale = 0.4 + Math.min((p.degree ?? 0) / 20, 0.8);
+      const baseScale = degreeScale * settings.nodeSize;
+      const scale = (selectedId === p.id || hovered?.id === p.id) ? baseScale * 1.6 : baseScale;
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
