@@ -471,6 +471,7 @@ function computeGalaxyLayout(
       const numLinks = Math.min((childNodes.length / 3) | 0, 3);
       for (let i = 0; i < numLinks; i++) {
         const target = others[Math.floor(Math.random() * others.length)];
+        if (!target) continue;
         const fromSN = sphericalNodes.get(node.id);
         const toSN = sphericalNodes.get(target.id);
         if (fromSN && toSN) {
