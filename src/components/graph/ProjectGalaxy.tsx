@@ -415,10 +415,11 @@ function computeGalaxyLayout(
     // Compute degree for each node (in + out edges from force links)
     const degreeMap = new Map<string, number>();
     for (const link of forceLinks) {
-      const sid = forceNodes[link.source].id;
-      const tid = forceNodes[link.target].id;
-      degreeMap.set(sid, (degreeMap.get(sid) || 0) + 1);
-      degreeMap.set(tid, (degreeMap.get(tid) || 0) + 1);
+      const srcNode = forceNodes[link.source];
+      const tgtNode = forceNodes[link.target];
+      if (!srcNode || !tgtNode) continue;
+      degreeMap.set(srcNode.id, (degreeMap.get(srcNode.id) || 0) + 1);
+      degreeMap.set(tgtNode.id, (degreeMap.get(tgtNode.id) || 0) + 1);
     }
     for (const n of resultNodes) {
       n.degree = degreeMap.get(n.id) || 0;
