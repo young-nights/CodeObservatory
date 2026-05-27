@@ -19,6 +19,7 @@ export function GalaxyEdges({ edges, edgeOpacity }: GalaxyEdgesProps) {
     const colors: number[] = [];
 
     for (const edge of edges) {
+      if (!edge?.from || !edge?.to) continue;
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
       let angleDiff = Math.abs(fromAngle - toAngle);
@@ -81,6 +82,7 @@ export function GalaxyEdges({ edges, edgeOpacity }: GalaxyEdgesProps) {
     const colors: number[] = [];
 
     for (const edge of edges) {
+      if (!edge?.from || !edge?.to) continue;
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
       let angleDiff = Math.abs(fromAngle - toAngle);

@@ -60,6 +60,7 @@ export function GalaxyScene({ layout, settings, clr, selectedId, onSelect }: Gal
     const dummy = new THREE.Object3D();
     for (let i = 0; i < planets.length; i++) {
       const p = planets[i];
+      if (!p) continue;
       dummy.position.set(p.x, p.y, p.z);
       const degreeScale = 0.4 + Math.min((p.degree ?? 0) / 20, 0.8);
       const baseScale = degreeScale * settings.nodeSize;
