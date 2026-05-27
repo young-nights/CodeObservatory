@@ -941,12 +941,14 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
     }
-    try {
-      return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
-    } catch (err) {
-      console.error("[ProjectGalaxy] computeGalaxyLayout failed:", err);
+    // Validate every node has required id field
+    const validNodes = graph.nodes.filter(n => n && typeof n.id === 'string');
+    const validEdges = graph.edges.filter(e => e && typeof e.source === 'string' && typeof e.target === 'string');
+    if (validNodes.length === 0) {
+      console.warn("[ProjectGalaxy] No valid nodes in graph data", graph);
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
     }
+    return computeGalaxyLayout(validNodes, validEdges, isDark, settings);
   }, [graph, isDark, settings]);
 
   // Selected node data
