@@ -126,15 +126,17 @@ function spiralPosition(
   galaxyScale: number,
   armCurvature: number,
 ): [number, number, number] {
+  if (armCount <= 0) return [0, 0, 0];
   const baseAngle = (2 * Math.PI * armIndex) / armCount;
   const thetaMax = Math.PI * 4; // 2 full turns
   const theta = t * thetaMax;
   const r = 5 + galaxyScale * 40 * t * Math.exp(armCurvature * theta * 0.3);
+  const clampedR = Math.min(r, 200); // prevent extreme coordinates
   const angle = baseAngle + theta;
   return [
-    r * Math.cos(angle),
-    (Math.random() - 0.5) * r * 0.3,
-    r * Math.sin(angle),
+    clampedR * Math.cos(angle),
+    (Math.random() - 0.5) * clampedR * 0.3,
+    clampedR * Math.sin(angle),
   ];
 }
 
@@ -942,6 +944,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   }, []);
 
   // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
+  // Only recompute when graph data or dark mode changes; settings changes skip force re-sim
   const layout = useMemo(() => {
     if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
@@ -954,7 +957,8 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
     }
     return computeGalaxyLayout(validNodes, validEdges, isDark, settings);
-  }, [graph, isDark, settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, isDark, settings.armCount, settings.galaxyScale, settings.armCurvature, settings.linkDistance, settings.linkStrength, settings.centerGravity, settings.chargeStrength]);
 
   // Selected node data
   const selectedNode = useMemo(
