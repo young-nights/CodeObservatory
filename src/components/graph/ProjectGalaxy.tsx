@@ -176,8 +176,6 @@ function computeGalaxyLayout(
   const galaxyScale = settings.galaxyScale ?? 1.0;
   const armCurvature = settings.armCurvature ?? 0.6;
 
-  try {
-
   // ── 1. Find root & build graph structures ──
   const targeted = new Set(edges.map((e) => e.target));
   const root = nodes.find((n) => !targeted.has(n.id));
@@ -491,11 +489,6 @@ function computeGalaxyLayout(
   // Safety filter: remove any edge with undefined from/to (belt-and-suspenders)
   const cleanEdges = resultEdges.filter(e => e && e.from && e.to);
   return { nodes: resultNodes, edges: cleanEdges };
-
-  } catch (err) {
-    console.error("[Galaxy] computeGalaxyLayout error:", err);
-    return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1002,6 +995,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   // Only recompute when graph data or dark mode changes; settings changes skip force re-sim
   const layout = useMemo(() => {
     if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+      console.log("[Galaxy] No graph data:", { graph, hasNodes: graph?.nodes?.length, hasEdges: graph?.edges?.length });
       return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
     }
     // Validate every node has required id field
