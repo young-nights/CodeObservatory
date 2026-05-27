@@ -463,7 +463,9 @@ function computeGalaxyLayout(
   }
   resultEdges.push(...siblingEdges);
 
-  return { nodes: resultNodes, edges: resultEdges };
+  // Safety filter: remove any edge with undefined from/to (belt-and-suspenders)
+  const cleanEdges = resultEdges.filter(e => e && e.from && e.to);
+  return { nodes: resultNodes, edges: cleanEdges };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -518,6 +520,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     const colors: number[] = [];
 
     for (const edge of layout.edges) {
+      if (!edge?.from || !edge?.to) continue;
       // Check if source & target are on the same spiral arm (angle diff < 30°)
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
@@ -578,6 +581,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     const colors: number[] = [];
 
     for (const edge of layout.edges) {
+      if (!edge?.from || !edge?.to) continue;
       // Only cross-arm edges (angle diff ≥ 30°)
       const fromAngle = getArmAngle(edge.from.x, edge.from.z);
       const toAngle = getArmAngle(edge.to.x, edge.to.z);
@@ -635,6 +639,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     const dummy = new THREE.Object3D();
     for (let i = 0; i < planets.length; i++) {
       const p = planets[i];
+      if (!p) continue;
       dummy.position.set(p.x, p.y, p.z);
       const degreeScale = 0.4 + Math.min((p.degree ?? 0) / 20, 0.8);
       const baseScale = degreeScale * settings.nodeSize;
@@ -657,7 +662,8 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation();
       if (e.instanceId !== undefined && e.instanceId < planets.length) {
-        onSelect(planets[e.instanceId].id);
+        const planet = planets[e.instanceId];
+        if (planet) onSelect(planet.id);
       }
     },
     [planets, onSelect],
@@ -668,7 +674,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
       e.stopPropagation();
       if (e.instanceId !== undefined && e.instanceId < planets.length) {
         const p = planets[e.instanceId];
-        setHovered({ id: p.id, position: [p.x, p.y, p.z] });
+        if (p) setHovered({ id: p.id, position: [p.x, p.y, p.z] });
       }
     },
     [planets],
@@ -678,7 +684,8 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     (e: ThreeEvent<MouseEvent>) => {
       e.stopPropagation();
       if (e.index !== undefined && e.index < stars.length) {
-        onSelect(stars[e.index].id);
+        const star = stars[e.index];
+        if (star) onSelect(star.id);
       }
     },
     [stars, onSelect],
@@ -689,7 +696,7 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
       e.stopPropagation();
       if (e.index !== undefined && e.index < stars.length) {
         const s = stars[e.index];
-        setHovered({ id: s.id, position: [s.x, s.y, s.z] });
+        if (s) setHovered({ id: s.id, position: [s.x, s.y, s.z] });
       }
     },
     [stars],
