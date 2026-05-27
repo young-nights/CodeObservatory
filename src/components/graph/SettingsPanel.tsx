@@ -88,8 +88,8 @@ interface Props {
 }
 
 const DEFAULTS: GalaxySettings = {
-  nodeSize: 1.2, edgeOpacity: 0.12, bloomStrength: 0.5,
-  chargeStrength: -80, linkDistance: 15, linkStrength: 0.4, centerGravity: 0.1,
+  nodeSize: 1.2, edgeOpacity: 0.12, bloomStrength: 1.5,
+  chargeStrength: -40, linkDistance: 8, linkStrength: 1.5, centerGravity: 2.0,
   armCount: 5, galaxyScale: 1.0, armCurvature: 0.6,
   colorPreset: "cosmic",
 };

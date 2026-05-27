@@ -737,8 +737,8 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         dampingFactor={0.08}
         autoRotate
         autoRotateSpeed={0.15}
-        minDistance={30}
-        maxDistance={600}
+        minDistance={15}
+        maxDistance={400}
         maxPolarAngle={Math.PI * 0.85}
       />
 
@@ -901,11 +901,11 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
 const DEFS: GalaxySettings = {
   nodeSize: 1.2,
   edgeOpacity: 0.05,
-  bloomStrength: 0.5,
-  chargeStrength: -80,
-  linkDistance: 12,
-  linkStrength: 0.5,
-  centerGravity: 0.08,
+  bloomStrength: 1.5,
+  chargeStrength: -40,
+  linkDistance: 8,
+  linkStrength: 1.5,
+  centerGravity: 2.0,
   armCount: 5,
   galaxyScale: 1.0,
   armCurvature: 0.6,
@@ -986,7 +986,7 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
       {/* ── 3D Canvas or loading state ── */}
       {!loading && layout.nodes.length > 0 ? (
         <Canvas
-          camera={{ position: [0, 0, 200], fov: 50, near: 0.1, far: 1000 }}
+          camera={{ position: [0, 80, 150], fov: 55, near: 0.1, far: 2000 }}
           gl={{ antialias: true, alpha: false }}
           style={{ width: canvasW, height: dim.h - 48 }}
           onPointerMissed={() => setSelectedId(null)}
