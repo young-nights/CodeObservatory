@@ -447,6 +447,24 @@ function computeGalaxyLayout(
     }
   }
 
+  // Sibling connections: create local mesh within each folder
+  for (const [, childNodes] of filesByParent) {
+    if (childNodes.length < 3) continue;
+    for (const node of childNodes) {
+      const others = childNodes.filter(c => c.id !== node.id);
+      const numLinks = Math.min((childNodes.length / 3) | 0, 3);
+      for (let i = 0; i < numLinks; i++) {
+        const target = others[Math.floor(Math.random() * others.length)];
+        if (!target) continue;
+        const fromSN = sphericalNodes.get(node.id);
+        const toSN = sphericalNodes.get(target.id);
+        if (fromSN && toSN) {
+          resultEdges.push({ from: fromSN, to: toSN, color: "#8888aa", childrenCount: 0 });
+        }
+      }
+    }
+  }
+
   return { nodes: resultNodes, edges: resultEdges };
 }
 
