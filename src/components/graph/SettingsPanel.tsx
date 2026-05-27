@@ -31,7 +31,53 @@ export interface GalaxySettings {
   armCount: number;
   galaxyScale: number;
   armCurvature: number;
+  colorPreset: string;
 }
+
+export interface ColorPreset {
+  name: string;
+  root: string;
+  folder1: string;
+  folder2: string;
+  fileDefault: string;
+  dust: string;
+  edgeRoot: string;
+  edgeDir: string;
+  edgeFile: string;
+}
+
+export const COLOR_PRESETS: Record<string, ColorPreset> = {
+  cosmic: {
+    name: "Cosmic",
+    root: "#e0f0ff", folder1: "#67e8f9", folder2: "#e879f9",
+    fileDefault: "#c4b5fd", dust: "#f0c060",
+    edgeRoot: "#6366f1", edgeDir: "#8b5cf6", edgeFile: "#facc15",
+  },
+  nebula: {
+    name: "Nebula",
+    root: "#fff0e0", folder1: "#ff8c42", folder2: "#ff6b9d",
+    fileDefault: "#ffb347", dust: "#ffd700",
+    edgeRoot: "#ff6b35", edgeDir: "#ff477e", edgeFile: "#ffa500",
+  },
+  aurora: {
+    name: "Aurora",
+    root: "#e0ffe0", folder1: "#4ade80", folder2: "#2dd4bf",
+    fileDefault: "#86efac", dust: "#a3e635",
+    edgeRoot: "#16a34a", edgeDir: "#0d9488", edgeFile: "#65a30d",
+  },
+  sunset: {
+    name: "Sunset",
+    root: "#ffe0e0", folder1: "#fb923c", folder2: "#f472b6",
+    fileDefault: "#fdba74", dust: "#fbbf24",
+    edgeRoot: "#ea580c", edgeDir: "#db2777", edgeFile: "#d97706",
+  },
+  monochrome: {
+    name: "Mono",
+    root: "#ffffff", folder1: "#a1a1aa", folder2: "#71717a",
+    fileDefault: "#d4d4d8", dust: "#a1a1aa",
+    edgeRoot: "#e4e4e7", edgeDir: "#a1a1aa", edgeFile: "#71717a",
+  },
+};
 
 interface Props {
   open: boolean;
@@ -45,6 +91,7 @@ const DEFAULTS: GalaxySettings = {
   nodeSize: 1.2, edgeOpacity: 0.12, bloomStrength: 0.5,
   chargeStrength: -80, linkDistance: 15, linkStrength: 0.4, centerGravity: 0.1,
   armCount: 5, galaxyScale: 1.0, armCurvature: 0.6,
+  colorPreset: "cosmic",
 };
 
 // ══════════════════════════════════════════════════
@@ -183,7 +230,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
   const footerText = isDark ? "#52525b" : "#a1a1aa";
 
   const [panelExpanded, setPanelExpanded] = useState(true);
-  const set = (key: keyof GalaxySettings, val: number) =>
+  const set = (key: keyof GalaxySettings, val: number | string) =>
     onChange({ ...settings, [key]: val });
 
   return (
@@ -273,6 +320,46 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       onChange={(v) => set("bloomStrength", v)}
                       isDark={isDark}
                     />
+                  </AccordionGroup>
+
+                  {/* ── Color Presets ── */}
+                  <AccordionGroup title={t("settings.colorPresets") || "Color Presets"} icon={Sparkles} defaultOpen={false} isDark={isDark}>
+                    <div className="text-xs leading-relaxed mb-3" style={{ color: textMuted }}>
+                      <p>Choose a color palette for the galaxy nodes and edges.</p>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+                      {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
+                        <button
+                          key={key}
+                          onClick={() => set("colorPreset", key)}
+                          style={{
+                            padding: "8px 6px",
+                            borderRadius: 8,
+                            border: settings.colorPreset === key
+                              ? `2px solid ${accentColor}`
+                              : `1px solid ${isDark ? "rgba(63,63,70,0.4)" : "rgba(0,0,0,0.1)"}`,
+                            background: settings.colorPreset === key
+                              ? (isDark ? "rgba(59,130,246,0.1)" : "rgba(37,99,235,0.05)")
+                              : "transparent",
+                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <div style={{ display: "flex", gap: 2 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: preset.root }} />
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: preset.folder1 }} />
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: preset.folder2 }} />
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: preset.fileDefault }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: settings.colorPreset === key ? textPrimary : textMuted, fontWeight: settings.colorPreset === key ? 600 : 400 }}>
+                            {preset.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </AccordionGroup>
 
                   {/* ── Spiral Galaxy ── */}

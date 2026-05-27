@@ -40,6 +40,7 @@
     "armCount": "臂数",
     "galaxyScale": "星系半径",
     "armCurvature": "螺旋弯曲度",
+    "colorPresets": "颜色预设",
     "reset": "恢复默认",
     "close": "关闭",
     "realTime": "实时预览",

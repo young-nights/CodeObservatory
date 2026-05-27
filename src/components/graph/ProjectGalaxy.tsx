@@ -13,7 +13,7 @@ import { forceSimulation, forceManyBody, forceLink, forceCenter } from "d3-force
 import { useScanGraph } from "@/hooks/useObservatory";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
-import { SettingsPanel, type GalaxySettings } from "./SettingsPanel";
+import { SettingsPanel, type GalaxySettings, COLOR_PRESETS } from "./SettingsPanel";
 import type { FileNode, FileEdge } from "@/lib/types";
 import { FolderOpen, File, Hash, Clock } from "lucide-react";
 
@@ -156,7 +156,20 @@ function computeGalaxyLayout(
   isDark: boolean,
   settings: GalaxySettings,
 ): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
-  const clr = isDark ? DARK : LIGHT;
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  // Merge base theme colors with preset overrides
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
 
   // Sanitize settings — use defaults if fields are missing (backward compat)
   const armCount = settings.armCount ?? 5;
@@ -489,7 +502,19 @@ interface SceneProps {
 }
 
 function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: SceneProps) {
-  const clr = isDark ? DARK : LIGHT;
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const dustRef = useRef<THREE.Points>(null);
   const [hovered, setHovered] = useState<{ id: string; position: [number, number, number] } | null>(null);
@@ -830,6 +855,10 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
             toneMapped={false}
             emissive={new THREE.Color("#80b0ff")}
             emissiveIntensity={2}
+            transparent
+            opacity={0.9}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
         </instancedMesh>
       )}
@@ -859,20 +888,24 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
               roughness={0.05}
               metalness={0.02}
               toneMapped={false}
+              transparent
+              opacity={0.95}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
             />
           </mesh>
           {/* 3 translucent halo spheres */}
           <mesh>
             <sphereGeometry args={[3.5 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[0]} transparent opacity={0.12} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[0]} transparent opacity={0.12} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
           <mesh>
             <sphereGeometry args={[5.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[1]} transparent opacity={0.06} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[1]} transparent opacity={0.06} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
           <mesh>
             <sphereGeometry args={[7.0 * settings.nodeSize, 32, 32]} />
-            <meshBasicMaterial color={clr.rootHalo[2]} transparent opacity={0.03} depthWrite={false} />
+            <meshBasicMaterial color={clr.rootHalo[2]} transparent opacity={0.03} depthWrite={false} blending={THREE.AdditiveBlending} />
           </mesh>
         </group>
       )}
@@ -904,6 +937,7 @@ const DEFS: GalaxySettings = {
   armCount: 5,
   galaxyScale: 1.0,
   armCurvature: 0.6,
+  colorPreset: "cosmic",
 };
 
 // ══════════════════════════════════════════════════════════
@@ -919,12 +953,25 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   const { theme } = useTheme();
   const { t } = useTranslation();
   const isDark = theme === "dark";
-  const clr = isDark ? DARK : LIGHT;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [settings, setSettings] = useState<GalaxySettings>(DEFS);
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
+
+  const baseClr = isDark ? DARK : LIGHT;
+  const preset = COLOR_PRESETS[settings.colorPreset] || COLOR_PRESETS.cosmic;
+  const clr = {
+    ...baseClr,
+    root: preset.root,
+    dir1: preset.folder1,
+    dir2: preset.folder2,
+    defaultFile: preset.fileDefault,
+    dust: preset.dust,
+    edgeRoot: preset.edgeRoot,
+    edgeDir: preset.edgeDir,
+    edgeFile: preset.edgeFile,
+  };
 
   // Loading timeout
   const [loadTimedOut, setLoadTimedOut] = useState(false);
