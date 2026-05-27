@@ -28,6 +28,9 @@ export interface GalaxySettings {
   linkDistance: number;
   linkStrength: number;
   centerGravity: number;
+  armCount: number;
+  galaxyScale: number;
+  armCurvature: number;
 }
 
 interface Props {
@@ -39,8 +42,9 @@ interface Props {
 }
 
 const DEFAULTS: GalaxySettings = {
-  nodeSize: 1, edgeOpacity: 0.15, bloomStrength: 1.5,
-  chargeStrength: -150, linkDistance: 20, linkStrength: 0.3, centerGravity: 0.1,
+  nodeSize: 1.2, edgeOpacity: 0.12, bloomStrength: 0.5,
+  chargeStrength: -80, linkDistance: 15, linkStrength: 0.4, centerGravity: 0.1,
+  armCount: 5, galaxyScale: 1.0, armCurvature: 0.6,
 };
 
 // ══════════════════════════════════════════════════
@@ -255,7 +259,7 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       label={t("settings.edgeOpacity")}
                       value={settings.edgeOpacity}
                       min={0.02}
-                      max={0.1}
+                      max={0.2}
                       step={0.01}
                       onChange={(v) => set("edgeOpacity", v)}
                       isDark={isDark}
@@ -267,6 +271,40 @@ export function SettingsPanel({ open, onClose, settings, onChange, layoutMode = 
                       max={1.0}
                       step={0.1}
                       onChange={(v) => set("bloomStrength", v)}
+                      isDark={isDark}
+                    />
+                  </AccordionGroup>
+
+                  {/* ── Spiral Galaxy ── */}
+                  <AccordionGroup title={t("settings.spiralGalaxy")} icon={Globe} defaultOpen={false} isDark={isDark}>
+                    <div className="text-xs leading-relaxed mb-3" style={{ color: textMuted }}>
+                      <p>Control spiral arm structure. Values take effect on next layout recompute.</p>
+                    </div>
+                    <SliderControl
+                      label={t("settings.armCount")}
+                      value={settings.armCount}
+                      min={2}
+                      max={8}
+                      step={1}
+                      onChange={(v) => set("armCount", v)}
+                      isDark={isDark}
+                    />
+                    <SliderControl
+                      label={t("settings.galaxyScale")}
+                      value={settings.galaxyScale}
+                      min={0.5}
+                      max={2.0}
+                      step={0.1}
+                      onChange={(v) => set("galaxyScale", v)}
+                      isDark={isDark}
+                    />
+                    <SliderControl
+                      label={t("settings.armCurvature")}
+                      value={settings.armCurvature}
+                      min={0.2}
+                      max={2.0}
+                      step={0.1}
+                      onChange={(v) => set("armCurvature", v)}
                       isDark={isDark}
                     />
                   </AccordionGroup>

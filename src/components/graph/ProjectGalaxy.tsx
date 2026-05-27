@@ -115,14 +115,44 @@ function randomOnSphere(radius: number, center: [number, number, number] = [0, 0
 }
 
 // ══════════════════════════════════════════════════════════
-// GALAXY LAYOUT — volumetric random init + d3-force-3d
-// Replaces old Sphere/Force dual-mode with a single hybrid
-// layout that produces organic cloud-cluster distributions.
+// SPIRAL ARM POSITIONING — logarithmic spiral arm helpers
+// ══════════════════════════════════════════════════════════
+
+/** Logarithmic spiral: r = a * e^(b * theta) */
+function spiralPosition(
+  armIndex: number,
+  t: number,
+  armCount: number,
+  galaxyScale: number,
+  armCurvature: number,
+): [number, number, number] {
+  const baseAngle = (2 * Math.PI * armIndex) / armCount;
+  const thetaMax = Math.PI * 4; // 2 full turns
+  const theta = t * thetaMax;
+  const r = 5 + galaxyScale * 40 * t * Math.exp(armCurvature * theta * 0.3);
+  const angle = baseAngle + theta;
+  return [
+    r * Math.cos(angle),
+    (Math.random() - 0.5) * r * 0.3,
+    r * Math.sin(angle),
+  ];
+}
+
+/** Returns angular position in the galaxy plane [-PI, PI] */
+function getArmAngle(x: number, z: number): number {
+  return Math.atan2(z, x);
+}
+
+// ══════════════════════════════════════════════════════════
+// GALAXY LAYOUT — spiral arm distribution + d3-force-3d
+// Logarithmic spiral arm placement preserving galaxy structure
+// with d3-force relaxation on top.
 // ══════════════════════════════════════════════════════════
 function computeGalaxyLayout(
   nodes: FileNode[],
   edges: FileEdge[],
   isDark: boolean,
+  settings: GalaxySettings,
 ): { nodes: SphericalNode[]; edges: SphericalEdge[] } {
   const clr = isDark ? DARK : LIGHT;
 
@@ -188,9 +218,10 @@ function computeGalaxyLayout(
   countLeaves(root.id);
   for (const nodeId of children.keys()) countLeaves(nodeId);
 
-  // ── 3. Volumetric random initial placement ──
+  // ── 3. Spiral-arm initial placement ──
   const sphericalNodes = new Map<string, SphericalNode>();
   const resultNodes: SphericalNode[] = [];
+  const nodeArm = new Map<string, number>(); // node id → arm index
 
   // Root fixed at origin
   const rootSN: SphericalNode = {
@@ -201,41 +232,50 @@ function computeGalaxyLayout(
   sphericalNodes.set(root.id, rootSN);
   resultNodes.push(rootSN);
 
-  // ── 3a. Depth-1 folders: random inside sphere radius 15-45 ──
+  // ── 3a. Depth-1 folders: distributed along spiral arms, t = 0.1~0.4 ──
   const depth1 = nodesByDepth.get(1) || [];
-  for (const node of depth1) {
-    const r = 6 + Math.random() * 12; // 6–18
-    const [x, y, z] = randomOnSphere(r);
+  for (let i = 0; i < depth1.length; i++) {
+    const node = depth1[i];
+    const arm = i % settings.armCount;
+    const t = 0.1 + Math.random() * 0.3;
+    const [x, y, z] = spiralPosition(arm, t, settings.armCount, settings.galaxyScale, settings.armCurvature);
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
       type: "planet",
       color: Math.random() < 0.5 ? clr.dir1 : clr.dir2,
-      x, y, z: z + (Math.random() - 0.5) * 8, depth: 1,
+      x, y, z, depth: 1,
     };
     sphericalNodes.set(node.id, sn);
+    nodeArm.set(node.id, arm);
     resultNodes.push(sn);
   }
 
-  // ── 3b. Depth-2+ folders: progressively larger random spheres ──
+  // ── 3b. Depth-2+ folders: follow same arm as parent, t = 0.4~0.8 ──
   for (let d = 2; d <= 10; d++) {
     const layer = nodesByDepth.get(d);
     if (!layer || layer.length === 0) break;
-    const rMin = 12 + (d - 2) * 4;
-    const rMax = 28 + (d - 2) * 5;
     for (const node of layer) {
-      const r = rMin + Math.random() * (rMax - rMin);
-      const [x, y, z] = randomOnSphere(r);
+      const pId = parentMap.get(node.id);
+      let arm: number;
+      if (pId && nodeArm.has(pId)) {
+        arm = nodeArm.get(pId)!;
+      } else {
+        arm = Math.floor(Math.random() * settings.armCount);
+      }
+      const t = 0.4 + Math.random() * 0.4;
+      const [x, y, z] = spiralPosition(arm, t, settings.armCount, settings.galaxyScale, settings.armCurvature);
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "planet", color: clr.dir2,
-        x, y, z: z + (Math.random() - 0.5) * 8, depth: d,
+        x, y, z, depth: d,
       };
       sphericalNodes.set(node.id, sn);
+      nodeArm.set(node.id, arm);
       resultNodes.push(sn);
     }
   }
 
-  // ── 3c. File (star) nodes: clustered near parent with outward push ──
+  // ── 3c. File (star) nodes: clustered around parent with spiral-aware offsets ──
   const sourceSet = new Set(edges.map((e) => e.source));
   const leafNodes = nodes.filter(
     (n) => !sourceSet.has(n.id) && n.id !== root.id && depthMap.has(n.id),
@@ -254,47 +294,48 @@ function computeGalaxyLayout(
   for (const [parentId, childNodes] of filesByParent) {
     const parentSN = sphericalNodes.get(parentId);
     if (!parentSN) continue;
-    const parentPos: [number, number, number] = [parentSN.x, parentSN.y, parentSN.z];
-    const pDist = Math.sqrt(parentPos[0] ** 2 + parentPos[1] ** 2 + parentPos[2] ** 2) || 1;
-    const pnx = parentPos[0] / pDist;
-    const pnz = parentPos[2] / pDist;
-    const count = childNodes.length;
+    const parentArm = nodeArm.get(parentId) ?? 0;
+    const armAngle = (2 * Math.PI * parentArm) / settings.armCount;
 
-    childNodes.forEach((node, i) => {
-      // Local cluster offset around parent (radius 8–25)
+    childNodes.forEach((node) => {
+      // Local cluster offset around parent (radius 3–10)
       const localR = 3 + Math.random() * 7;
       const [ox, oy, oz] = randomOnSphere(localR);
-      // Outward push factor: 0.3–1.0, total radius up to ~80
-      const pushFactor = count > 1 ? 0.3 + (i / (count - 1)) * 0.7 : 0.5;
-      const pushR = Math.min(12 + pushFactor * 20, 32);
+      // Small outward push along arm direction
+      const pushOut = 2 + Math.random() * 3;
+      const nx = Math.cos(armAngle);
+      const nz = Math.sin(armAngle);
       const ext = (node.extension || "").toLowerCase();
       const starDepth = depthMap.get(node.id) ?? 2;
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
         type: "star",
         color: clr.file[ext] || clr.defaultFile,
-        x: parentPos[0] + ox + pnx * pushR * 0.3,
-        y: parentPos[1] + oy + (Math.random() - 0.5) * 12,
-        z: parentPos[2] + oz + pnz * pushR * 0.3 + (Math.random() - 0.5) * 12,
+        x: parentSN.x + ox + nx * pushOut,
+        y: parentSN.y + oy + (Math.random() - 0.5) * 16,
+        z: parentSN.z + oz + nz * pushOut,
         extension: node.extension, size: node.size,
         depth: starDepth,
       };
       sphericalNodes.set(node.id, sn);
+      nodeArm.set(node.id, parentArm);
       resultNodes.push(sn);
     });
   }
 
-  // ── 3d. Dust nodes: random in large sphere 50–150 ──
+  // ── 3d. Dust nodes: inter-arm space, radius 15–40 + height jitter ──
   const alreadyPlaced = new Set(sphericalNodes.keys());
   const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
   for (const node of remaining) {
-    const dustR = 20 + Math.random() * 40;
-    const [sx, sy, sz] = randomOnSphere(dustR);
+    const r = 15 + Math.random() * 25;
+    const angle = Math.random() * 2 * Math.PI;
     const d = depthMap.get(node.id) ?? 99;
     const sn: SphericalNode = {
       id: node.id, name: node.label, path: node.path,
       type: "dust", color: clr.dust,
-      x: sx, y: sy, z: sz,
+      x: r * Math.cos(angle),
+      y: (Math.random() - 0.5) * 30,
+      z: r * Math.sin(angle),
       depth: d,
     };
     sphericalNodes.set(node.id, sn);
@@ -339,11 +380,11 @@ function computeGalaxyLayout(
       )
       .force(
         "link",
-        forceLink(forceLinks).distance(12).strength(0.5),
+        forceLink(forceLinks).distance(settings.linkDistance).strength(settings.linkStrength),
       )
       .force(
         "center",
-        forceCenter(0, 0, 0).strength(0.08),
+        forceCenter(0, 0, 0).strength(settings.centerGravity),
       )
       .stop();
 
@@ -471,24 +512,88 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
     return new Float32Array(dusts.flatMap(() => [c.r, c.g, c.b]));
   }, [dusts, clr.dust]);
 
-  // ── ArcEdges: straight line segments with vertex colors, depth-based opacity,
-  //   silk-bundle parallel offsets for dense folders ──
-  const arcGeometry = useMemo(() => {
+  // ── Curved (same-arm) edge geometry: CubicBezierCurve3, AdditiveBlending ──
+  const arcCurvedGeometry = useMemo(() => {
     const positions: number[] = [];
     const colors: number[] = [];
 
     for (const edge of layout.edges) {
+      // Check if source & target are on the same spiral arm (angle diff < 30°)
+      const fromAngle = getArmAngle(edge.from.x, edge.from.z);
+      const toAngle = getArmAngle(edge.to.x, edge.to.z);
+      let angleDiff = Math.abs(fromAngle - toAngle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      if (angleDiff >= Math.PI / 6) continue; // cross-arm → handled by straight geometry
+
       const fromDist = Math.sqrt(edge.from.x**2 + edge.from.y**2 + edge.from.z**2);
       const toDist = Math.sqrt(edge.to.x**2 + edge.to.y**2 + edge.to.z**2);
       const avgDist = (fromDist + toDist) / 2;
 
-      // Edge opacity by depth: near = bright, far = dim
       let alpha: number;
       if (avgDist < 15) alpha = 0.35;
       else if (avgDist < 40) alpha = 0.20;
       else alpha = 0.08;
 
-      // Edge color: blue-white for near, grey-white for far
+      const color = avgDist < 20
+        ? new THREE.Color("#d0dcff").multiplyScalar(alpha * 3)
+        : new THREE.Color("#b0b4c8").multiplyScalar(alpha * 3);
+
+      // Build CubicBezierCurve3 with control points offset perpendicular to spiral
+      const fromPos = new THREE.Vector3(edge.from.x, edge.from.y, edge.from.z);
+      const toPos = new THREE.Vector3(edge.to.x, edge.to.y, edge.to.z);
+      const mid = fromPos.clone().add(toPos).multiplyScalar(0.5);
+      const midAngle = getArmAngle(mid.x, mid.z);
+      const dist = fromPos.distanceTo(toPos);
+      const cpOffset = dist * 0.35;
+      const cp1 = new THREE.Vector3(
+        mid.x + Math.cos(midAngle + Math.PI / 2) * cpOffset,
+        mid.y + cpOffset * 0.3,
+        mid.z + Math.sin(midAngle + Math.PI / 2) * cpOffset,
+      );
+      const cp2 = new THREE.Vector3(
+        mid.x + Math.cos(midAngle - Math.PI / 2) * cpOffset,
+        mid.y - cpOffset * 0.3,
+        mid.z + Math.sin(midAngle - Math.PI / 2) * cpOffset,
+      );
+      const curve = new THREE.CubicBezierCurve3(fromPos, cp1, cp2, toPos);
+      const pts = curve.getPoints(32);
+
+      for (let i = 0; i < pts.length - 1; i++) {
+        positions.push(pts[i].x, pts[i].y, pts[i].z);
+        positions.push(pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
+        colors.push(color.r, color.g, color.b);
+        colors.push(color.r, color.g, color.b);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colors), 3));
+    return geo;
+  }, [layout.edges]);
+
+  // ── Straight (cross-arm) edge geometry: LineSegments, NormalBlending ──
+  const arcStraightGeometry = useMemo(() => {
+    const positions: number[] = [];
+    const colors: number[] = [];
+
+    for (const edge of layout.edges) {
+      // Only cross-arm edges (angle diff ≥ 30°)
+      const fromAngle = getArmAngle(edge.from.x, edge.from.z);
+      const toAngle = getArmAngle(edge.to.x, edge.to.z);
+      let angleDiff = Math.abs(fromAngle - toAngle);
+      if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+      if (angleDiff < Math.PI / 6) continue; // same-arm → handled by curved geometry
+
+      const fromDist = Math.sqrt(edge.from.x**2 + edge.from.y**2 + edge.from.z**2);
+      const toDist = Math.sqrt(edge.to.x**2 + edge.to.y**2 + edge.to.z**2);
+      const avgDist = (fromDist + toDist) / 2;
+
+      let alpha: number;
+      if (avgDist < 15) alpha = 0.35;
+      else if (avgDist < 40) alpha = 0.20;
+      else alpha = 0.08;
+
       const color = avgDist < 20
         ? new THREE.Color("#d0dcff").multiplyScalar(alpha * 3)
         : new THREE.Color("#b0b4c8").multiplyScalar(alpha * 3);
@@ -624,15 +729,28 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
         maxPolarAngle={Math.PI * 0.85}
       />
 
-      {/* ── Edge filaments: straight line segments, vertexColors, semi-transparent ── */}
-      {arcGeometry.attributes.position?.count > 0 && (
-        <lineSegments geometry={arcGeometry}>
+      {/* ── Curved (same-arm) edge filaments: CubicBezierCurve3, AdditiveBlending ── */}
+      {arcCurvedGeometry.attributes.position?.count > 0 && (
+        <lineSegments geometry={arcCurvedGeometry}>
           <lineBasicMaterial
             vertexColors
             transparent
             opacity={settings.edgeOpacity}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
+          />
+        </lineSegments>
+      )}
+
+      {/* ── Straight (cross-arm) edge filaments: LineSegments, NormalBlending ── */}
+      {arcStraightGeometry.attributes.position?.count > 0 && (
+        <lineSegments geometry={arcStraightGeometry}>
+          <lineBasicMaterial
+            vertexColors
+            transparent
+            opacity={settings.edgeOpacity * 0.7}
+            depthWrite={false}
+            blending={THREE.NormalBlending}
           />
         </lineSegments>
       )}
@@ -761,12 +879,15 @@ function GalaxyScene({ layout, settings, isDark, selectedId, onSelect }: ScenePr
 // ══════════════════════════════════════════════════════════
 const DEFS: GalaxySettings = {
   nodeSize: 1.2,
-  edgeOpacity: 0.05,
+  edgeOpacity: 0.12,
   bloomStrength: 0.5,
   chargeStrength: -80,
-  linkDistance: 12,
-  linkStrength: 0.5,
-  centerGravity: 0.08,
+  linkDistance: 15,
+  linkStrength: 0.4,
+  centerGravity: 0.1,
+  armCount: 5,
+  galaxyScale: 1.0,
+  armCurvature: 0.6,
 };
 
 // ══════════════════════════════════════════════════════════
@@ -809,8 +930,8 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
   const layout = useMemo(() => {
     if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-    return computeGalaxyLayout(graph.nodes, graph.edges, isDark);
-  }, [graph, isDark]);
+    return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
+  }, [graph, isDark, settings]);
 
   // Selected node data
   const selectedNode = useMemo(
