@@ -418,6 +418,15 @@ function GalaxyScene({
     return colors;
   }, [simLinks, simNodes, idxMap]);
 
+  // ── Edge geometry (imperative, no R3F declarative timing issues) ──
+  const edgeGeo = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const pos = new Float32Array(simLinks.length * 6);
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(edgeColorData, 3));
+    return geo;
+  }, [simLinks.length, edgeColorData]);
+
   // ── Flow particle pre-init ──────────────
   const particleCount = Math.min(simLinks.length * 2, 3000);
   const particlePairsRef = useRef<[number, number][]>([]);
@@ -459,28 +468,6 @@ function GalaxyScene({
     mesh.instanceColor!.needsUpdate = true;
   }, [simNodes.length, metadataMap]);
 
-  // ── Set initial edge colors & positions ──
-  useEffect(() => {
-    const lines = edgeLineRef.current;
-    if (!lines || simLinks.length === 0) return;
-    const geo = lines.geometry;
-    geo.setAttribute("color", new THREE.BufferAttribute(edgeColorData, 3));
-    // Initialize positions
-    const posArr = geo.attributes.position.array as Float32Array;
-    for (let i = 0; i < simLinks.length; i++) {
-      const link = simLinks[i];
-      const si = idxMap.get(link.source);
-      const ti = idxMap.get(link.target);
-      if (si == null || ti == null) continue;
-      const s = simNodes[si].pos;
-      const t = simNodes[ti].pos;
-      posArr[i * 6] = s.x;     posArr[i * 6 + 1] = s.y;     posArr[i * 6 + 2] = s.z;
-      posArr[i * 6 + 3] = t.x; posArr[i * 6 + 4] = t.y; posArr[i * 6 + 5] = t.z;
-    }
-    geo.attributes.position.needsUpdate = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ═══════════════════════════════════════
   // UNIFIED ANIMATION LOOP
   // ═══════════════════════════════════════
@@ -521,7 +508,8 @@ function GalaxyScene({
     // c. Update edge LineSegments
     const lines = edgeLineRef.current;
     if (lines && simLinks.length > 0) {
-      const posArr = lines.geometry.attributes.position.array as Float32Array;
+      const posAttr = edgeGeo.attributes.position as THREE.BufferAttribute;
+      const posArr = posAttr.array as Float32Array;
       for (let i = 0; i < simLinks.length; i++) {
         const link = simLinks[i];
         const si = idxMap.get(link.source);
@@ -532,7 +520,7 @@ function GalaxyScene({
         posArr[i * 6] = s.x;     posArr[i * 6 + 1] = s.y;     posArr[i * 6 + 2] = s.z;
         posArr[i * 6 + 3] = t.x; posArr[i * 6 + 4] = t.y; posArr[i * 6 + 5] = t.z;
       }
-      lines.geometry.attributes.position.needsUpdate = true;
+      posAttr.needsUpdate = true;
     }
 
     // d. Update flow particles
@@ -642,17 +630,7 @@ function GalaxyScene({
 
       {/* ── Edges: single LineSegments ── */}
       {simLinks.length > 0 && (
-        <lineSegments ref={edgeLineRef}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[new Float32Array(simLinks.length * 6), 3]}
-            />
-            <bufferAttribute
-              attach="attributes-color"
-              args={[edgeColorData, 3]}
-            />
-          </bufferGeometry>
+        <lineSegments ref={edgeLineRef} geometry={edgeGeo}>
           <lineBasicMaterial
             vertexColors
             transparent
