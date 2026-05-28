@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 // ══════════════════════════════════════════════════
 // Data structures
@@ -30,7 +31,7 @@ pub struct FileNode {
     pub truncated: Option<bool>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct FileEdge {
     pub id: String,
     pub source: String,
@@ -41,7 +42,7 @@ pub struct FileEdge {
     pub label: Option<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct GraphData {
     pub nodes: Vec<FileNode>,
     pub edges: Vec<FileEdge>,
@@ -186,22 +187,11 @@ fn should_skip_dir(name: &str) -> bool {
 // Scan command — optimized single-pass walk
 // ══════════════════════════════════════════════════
 
-#[tauri::command]
-pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<GraphData, String> {
-    let max_depth = max_depth.unwrap_or(6);
-    let root = PathBuf::from(&project_path);
-
-    if !root.exists() {
-        return Err(format!("Path does not exist: {}", project_path));
-    }
-    if !root.is_dir() {
-        return Err(format!("Path is not a directory: {}", project_path));
-    }
-
+fn do_scan(project_path: &str, root: &PathBuf, max_depth: u32) -> Result<GraphData, String> {
     let root_label = root
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| project_path.clone());
+        .unwrap_or_else(|| project_path.to_string());
 
     // Pre-allocate for large projects
     let mut nodes: Vec<FileNode> = Vec::with_capacity(4096);
@@ -210,19 +200,19 @@ pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<Gr
 
     // Root node
     nodes.push(FileNode {
-        id: project_path.clone(),
+        id: project_path.to_string(),
         label: root_label.clone(),
-        path: project_path.clone(),
+        path: project_path.to_string(),
         change_count: None,
         kind: Some("dir".to_string()),
         extension: None,
         size: None,
-        modified: get_modified(&root),
+        modified: get_modified(root),
         has_children: None,
         truncated: None,
     });
 
-    walk(&root, &project_path, 0, max_depth, &mut nodes, &mut edges, &mut edge_idx)
+    walk(root, project_path, 0, max_depth, &mut nodes, &mut edges, &mut edge_idx)
         .map_err(|e| format!("Scan error: {}", e))?;
 
     // Post: mark dirs with children
@@ -237,6 +227,52 @@ pub fn scan_directory(project_path: String, max_depth: Option<u32>) -> Result<Gr
     }
 
     Ok(GraphData { nodes, edges })
+}
+
+/// Optimised scan with in-memory cache.
+/// First call does a real scan; subsequent calls return cached data
+/// unless the root directory's modification time has changed.
+#[tauri::command]
+pub fn scan_directory(
+    project_path: String,
+    max_depth: Option<u32>,
+    state: tauri::State<'_, crate::state::AppState>,
+) -> Result<GraphData, String> {
+    let max_depth = max_depth.unwrap_or(6);
+    let root = PathBuf::from(&project_path);
+
+    if !root.exists() {
+        return Err(format!("Path does not exist: {}", project_path));
+    }
+    if !root.is_dir() {
+        return Err(format!("Path is not a directory: {}", project_path));
+    }
+
+    // Check cache — if root mtime is unchanged, return cached result instantly
+    let root_mtime = root.metadata().ok().and_then(|m| m.modified().ok());
+    {
+        let cache = state.scan_cache.lock();
+        if let Some(cached) = cache.get(&project_path) {
+            if cached.root_mtime == root_mtime {
+                return Ok(cached.data.clone());
+            }
+        }
+    }
+
+    // Cache miss or stale — do full scan
+    let data = do_scan(&project_path, &root, max_depth)?;
+
+    // Store in cache
+    {
+        let mut cache = state.scan_cache.lock();
+        cache.insert(project_path.clone(), crate::state::CachedGraph {
+            data: data.clone(),
+            root_mtime,
+            scanned_at: SystemTime::now(),
+        });
+    }
+
+    Ok(data)
 }
 
 /// Single-pass recursive walk

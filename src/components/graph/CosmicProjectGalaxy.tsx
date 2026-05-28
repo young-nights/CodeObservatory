@@ -747,10 +747,9 @@ export default function CosmicProjectGalaxy({ projectPath, fullscreen = false }:
       {/* ── 3D Canvas ── */}
       {!loading && graph && graph.nodes.length > 0 && simData ? (
         <Canvas
-          key={fullscreen ? "fs" : "normal"}
           gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
           camera={{ position: [0, 20, 35], fov: 55, near: 0.1, far: 600 }}
-          style={{ position: "absolute", inset: 0 }}
+          style={{ position: "absolute", inset: 0, transition: "inset 300ms ease" }}
         >
           <GalaxyScene
             key={simData.simNodes.length}
