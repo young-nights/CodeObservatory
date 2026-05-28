@@ -41,26 +41,6 @@ function nodeColor(n: any): string {
 // ══════════════════════════════════════════════════
 // Starfield — 3-layer depth
 // ══════════════════════════════════════════════════
-// ══════════════════════════════════════════════════
-// Circular gradient texture for Sprite nodes
-// ══════════════════════════════════════════════════
-function makeCircleTexture(): THREE.Texture {
-  const sz = 128, c = document.createElement("canvas");
-  c.width = sz; c.height = sz;
-  const ctx = c.getContext("2d")!;
-  const g = ctx.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
-  g.addColorStop(0, "rgba(255,255,255,1)");
-  g.addColorStop(0.3, "rgba(255,255,255,0.85)");
-  g.addColorStop(0.7, "rgba(255,255,255,0.3)");
-  g.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, sz, sz);
-  const t = new THREE.CanvasTexture(c);
-  t.needsUpdate = true;
-  return t;
-}
-const CIRCLE_TEX = makeCircleTexture();
-
 function makeStarfield(): THREE.Group {
   const g = new THREE.Group();
   [[4000, 300, 0.25, 0.3], [3000, 180, 0.45, 0.5], [2000, 100, 0.7, 0.65]].forEach(([cnt, rad, sz, op]) => {
@@ -222,19 +202,18 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
           const isConnected = hoveredNode ? adj.get(hoveredNode)?.has(node.id) : false;
           const dimmed = hoveredNode && !isHov && !isConnected;
 
-          // 2D Sprite — semi-transparent circle, always faces camera
-          const sprite = new THREE.Sprite();
-          const mat = new THREE.SpriteMaterial({
-            map: CIRCLE_TEX,
+          // Single sphere — no glowMesh
+          const mat = new THREE.MeshStandardMaterial({
             color: dimmed ? col.clone().multiplyScalar(0.25) : col,
+            emissive: dimmed ? new THREE.Color(0) : col,
+            emissiveIntensity: dimmed ? 0 : 0.7,
+            roughness: 0.2,
+            metalness: 0.1,
             transparent: true,
-            opacity: dimmed ? 0.2 : 0.85,
-            depthWrite: false,
+            opacity: dimmed ? 0.25 : 0.95,
             toneMapped: false,
           });
-          sprite.material = mat;
-          sprite.scale.set(4, 4, 1); // uniform size
-          return sprite;
+          return new THREE.Mesh(new THREE.SphereGeometry(3, 16, 16), mat);
         }}
         nodeThreeObjectExtend={false}
         // ── Links: colorful, thin, dreamy ──
