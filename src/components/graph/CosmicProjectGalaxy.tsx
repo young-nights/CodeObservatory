@@ -16,22 +16,23 @@ import { FolderOpen, File, Clock, Hash, X } from "lucide-react";
 // ══════════════════════════════════════════════════
 
 const COLORS = {
-  bg: "#000011",
-  dirCyan: "#00e5ff",
-  dirPurple: "#b44cff",
+  bg: "#050510",
+  dirCyan: "#ff9060",
+  dirPurple: "#ffb080",
   fileColors: {
-    ts: "#5b8def", tsx: "#6b9df0", js: "#56b6c2", jsx: "#66c6d2",
-    rs: "#e07050", md: "#c084fc", json: "#d4b040", toml: "#d4b040",
-    yaml: "#d4b040", yml: "#d4b040", css: "#50b070", scss: "#60c080",
-    html: "#e89050", py: "#40b8d0", c: "#8899aa", h: "#8899aa",
-    cpp: "#8899aa", hpp: "#8899aa", go: "#60b0d0", java: "#b07219",
-    vue: "#42b883", svelte: "#ff3e00", kt: "#7f52ff", swift: "#fa7343",
-    default: "#8ba0c0",
+    ts: "#ff9060", tsx: "#ffa070", js: "#e08050", jsx: "#f09060",
+    rs: "#ff8050", md: "#e0a070", json: "#d09060", toml: "#d09060",
+    yaml: "#d09060", yml: "#d09060", css: "#c08050", scss: "#d09060",
+    html: "#e09060", py: "#d09070", c: "#b08060", h: "#b08060",
+    cpp: "#b08060", hpp: "#b08060", go: "#c09060", java: "#c08050",
+    vue: "#d0a060", svelte: "#e09050", kt: "#c09070", swift: "#e0a060",
+    default: "#c09070",
   } as Record<string, string>,
-  edgeRootDir: "#a080ff",
-  edgeDirFile: "#6050c0",
-  edgeDirDir: "#6050c0",
-  particleFlow: "#8880ff",
+  edgeRootDir: "#ff9060",
+  edgeDirFile: "#cc7050",
+  edgeDirDir: "#cc7050",
+  particleFlow: "#ff9060",
+  nodeEmissive: "#ffcc80",
 };
 
 // ══════════════════════════════════════════════════
@@ -77,6 +78,11 @@ function getDirColor(depth: number): string {
   return depth <= 1 ? COLORS.dirCyan : COLORS.dirPurple;
 }
 
+/** All nodes share the same uniform size — perspective creates depth */
+const UNIFORM_NODE_SCALE = 0.35;
+const ROOT_NODE_SCALE = 0.8;  // cluster center, slightly larger
+const NODE_SEGMENTS = 12;      // lower poly for performance
+
 // ══════════════════════════════════════════════════
 // Simulation Types
 // ══════════════════════════════════════════════════
@@ -101,25 +107,25 @@ interface SimLink {
 // SIM Constants
 // ══════════════════════════════════════════════════
 const SIM = {
-  chargeBase: -400,
-  linkDistance: 9,
-  linkStrength: 0.15,
-  centerStrength: 0.06,
-  velocityDecay: 0.32,
-  maxVelocity: 6,
-  maxRadius: 18,
-  elasticPower: 1.8,
+  chargeBase: -600,
+  linkDistance: 12,
+  linkStrength: 0.1,
+  centerStrength: 0.04,
+  velocityDecay: 0.3,
+  maxVelocity: 5,
+  maxRadius: 25,
+  elasticPower: 1.6,
 };
 
 // ══════════════════════════════════════════════════
 // Progressive Settle Config
 // ══════════════════════════════════════════════════
 const WARMUP = {
-  frames: 400,
-  chargeStart: 4,
+  frames: 300,
+  chargeStart: 3,
   chargeEnd: 1.0,
-  decayStart: 0.65,
-  decayEnd: 0.32,
+  decayStart: 0.6,
+  decayEnd: 0.3,
 };
 
 // ══════════════════════════════════════════════════
@@ -350,7 +356,7 @@ function GalaxyScene({
     simNodes.forEach((n, i) => {
       const hex = n.type === "dir" || n.type === "root"
         ? getDirColor(n.depth) : getFileColor(n.extension);
-      const baseScale = n.type === "root" ? 1.6 : n.type === "dir" ? 0.65 : 0.35;
+      const baseScale = n.type === "root" ? ROOT_NODE_SCALE : UNIFORM_NODE_SCALE;
       map.set(i, {
         id: n.id, label: n.label, type: n.type, depth: n.depth,
         extension: n.extension, path: n.path, sizeBytes: n.sizeBytes,
@@ -361,13 +367,13 @@ function GalaxyScene({
   }, [simNodes]);
 
   // ── Node geometry & material ────────────
-  const sphereGeo = useMemo(() => new THREE.SphereGeometry(1, 16, 16), []);
+  const sphereGeo = useMemo(() => new THREE.SphereGeometry(1, NODE_SEGMENTS, NODE_SEGMENTS), []);
   const nodeMat = useMemo(() => new THREE.MeshStandardMaterial({
-    roughness: 0.25,
+    roughness: 0.2,
     metalness: 0.05,
     toneMapped: false,
-    emissive: new THREE.Color("#ffffff"),
-    emissiveIntensity: 1.4,
+    emissive: new THREE.Color(COLORS.nodeEmissive),
+    emissiveIntensity: 1.6,
   }), []);
 
   // ── Edge colors (pre-computed) ──────────
@@ -601,18 +607,18 @@ function GalaxyScene({
         <Stars radius={200} depth={80} count={8000} factor={5} saturation={0.15} fade speed={0.4} />
       </points>
 
-      {/* Nebula rings */}
+      {/* Nebula rings — warm tones */}
       <mesh ref={ring1Ref} position={[0, -1, 0]} rotation={[Math.PI / 2.5, 0, 0]}>
-        <ringGeometry args={[19.5, 20.5, 128]} />
-        <meshBasicMaterial color="#4020a0" transparent opacity={0.012} side={THREE.DoubleSide} />
+        <ringGeometry args={[24.5, 25.5, 128]} />
+        <meshBasicMaterial color="#804020" transparent opacity={0.015} side={THREE.DoubleSide} />
       </mesh>
       <mesh ref={ring2Ref} position={[0, -2, 0]} rotation={[Math.PI / 2.5, 0, 0]}>
-        <ringGeometry args={[34.5, 35.5, 128]} />
-        <meshBasicMaterial color="#2040a0" transparent opacity={0.008} side={THREE.DoubleSide} />
+        <ringGeometry args={[39.5, 40.5, 128]} />
+        <meshBasicMaterial color="#603020" transparent opacity={0.01} side={THREE.DoubleSide} />
       </mesh>
       <mesh ref={ring3Ref} position={[0, -3, 0]} rotation={[Math.PI / 2.5, 0, 0]}>
-        <ringGeometry args={[54.5, 55.5, 128]} />
-        <meshBasicMaterial color="#102060" transparent opacity={0.005} side={THREE.DoubleSide} />
+        <ringGeometry args={[59.5, 60.5, 128]} />
+        <meshBasicMaterial color="#402015" transparent opacity={0.006} side={THREE.DoubleSide} />
       </mesh>
 
       {/* ── Edges: single LineSegments ── */}
@@ -631,9 +637,9 @@ function GalaxyScene({
           <lineBasicMaterial
             vertexColors
             transparent
-            opacity={0.4}
+            opacity={0.35}
             toneMapped={false}
-            depthWrite
+            depthWrite={false}
           />
         </lineSegments>
       )}
@@ -674,20 +680,20 @@ function GalaxyScene({
         }}
       />
 
-      {/* Root glow aura */}
+      {/* Root glow aura — warm center of cluster */}
       <mesh position={[0, 0, 0]}>
-        <sphereGeometry args={[4, 64, 64]} />
-        <meshBasicMaterial color="#6460ff" transparent opacity={0.03} />
+        <sphereGeometry args={[5, 32, 32]} />
+        <meshBasicMaterial color="#ff9060" transparent opacity={0.04} />
       </mesh>
 
       {/* Bloom */}
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.03}
-          intensity={3.0}
-          radius={1.2}
+          luminanceThreshold={0.02}
+          intensity={3.5}
+          radius={1.3}
           mipmapBlur
-          luminanceSmoothing={0.7}
+          luminanceSmoothing={0.6}
         />
       </EffectComposer>
     </>
