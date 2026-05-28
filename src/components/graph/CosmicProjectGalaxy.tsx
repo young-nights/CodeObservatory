@@ -1,14 +1,15 @@
 // CosmicProjectGalaxy — Ultimate 3D Galaxy Visualization
 // InstancedMesh + LineSegments + Progressive Settle + Unified Animation Loop
 // Draw Calls: 3 (nodes + edges + particles) instead of O(N)
+// Multi-project support: galaxy clusters with spatial offsets
 
 import { useRef, useMemo, useState, useCallback, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
-import { useScanGraph } from "@/hooks/useObservatory";
-import type { FileNode, FileEdge } from "@/lib/types";
+import type { FileNode, FileEdge, GraphData } from "@/lib/types";
+import * as api from "@/lib/api";
 import { FolderOpen, File, Clock, Hash, X } from "lucide-react";
 
 // ══════════════════════════════════════════════════
@@ -127,6 +128,24 @@ const WARMUP = {
   decayStart: 0.6,
   decayEnd: 0.3,
 };
+
+// ══════════════════════════════════════════════════
+// Multi-project scanning cache (module-level)
+// ══════════════════════════════════════════════════
+const projectScanCache = new Map<string, { data: GraphData; ts: number }>();
+
+// ══════════════════════════════════════════════════
+// Compute spatial offsets for N projects (circular layout)
+// ══════════════════════════════════════════════════
+function computeOffsets(n: number): [number, number, number][] {
+  if (n === 0) return [];
+  if (n === 1) return [[0, 0, 0]];
+  const radius = 15 * Math.sqrt(n);
+  return Array.from({ length: n }, (_, i) => {
+    const angle = (2 * Math.PI * i) / n;
+    return [radius * Math.cos(angle), 0, radius * Math.sin(angle)];
+  });
+}
 
 // ══════════════════════════════════════════════════
 // buildForceSim — no pre-settle; tick() accepts params
@@ -744,18 +763,107 @@ function NodeInfo({ node, onClose }: { node: FileNode; onClose: () => void }) {
 }
 
 // ══════════════════════════════════════════════════
-// Main Component
+// Main Component — Multi-project galaxy clusters
 // ══════════════════════════════════════════════════
 interface CosmicProjectGalaxyProps {
-  projectPath: string;
+  projectPaths: string[];
   fullscreen?: boolean;
 }
 
 export default function CosmicProjectGalaxy({
-  projectPath,
+  projectPaths,
   fullscreen: _fullscreen = false,
 }: CosmicProjectGalaxyProps) {
-  const { graph, loading, refresh } = useScanGraph(projectPath);
+  // ── Multi-project scanning ──
+  const [allGraphs, setAllGraphs] = useState<Map<string, GraphData>>(new Map());
+  const [loading, setLoading] = useState(false);
+
+  const pathsKey = projectPaths.join("\0");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAll() {
+      setLoading(true);
+      const newGraphs = new Map<string, GraphData>();
+      for (const path of projectPaths) {
+        // Check local cache first
+        const cached = projectScanCache.get(path);
+        if (cached) {
+          newGraphs.set(path, cached.data);
+          continue;
+        }
+        try {
+          const data = await api.scanDirectory(path);
+          newGraphs.set(path, data);
+          projectScanCache.set(path, { data, ts: Date.now() });
+        } catch (err) {
+          console.error(`[CosmicProjectGalaxy] Failed to scan ${path}:`, err);
+        }
+      }
+      if (!cancelled) {
+        setAllGraphs(newGraphs);
+        setLoading(false);
+      }
+    }
+    loadAll();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathsKey]);
+
+  const refreshAll = useCallback(async () => {
+    setLoading(true);
+    const newGraphs = new Map<string, GraphData>();
+    for (const path of projectPaths) {
+      try {
+        const data = await api.scanDirectory(path);
+        newGraphs.set(path, data);
+        projectScanCache.set(path, { data, ts: Date.now() });
+      } catch (err) {
+        console.error(`[CosmicProjectGalaxy] Failed to scan ${path}:`, err);
+      }
+    }
+    setAllGraphs(newGraphs);
+    setLoading(false);
+  }, [projectPaths]);
+
+  // ── Merge graphs with prefixed IDs ──
+  const mergedGraph = useMemo(() => {
+    if (allGraphs.size === 0) return null;
+
+    const allNodes: FileNode[] = [];
+    const allEdges: FileEdge[] = [];
+
+    projectPaths.forEach((path, idx) => {
+      const graph = allGraphs.get(path);
+      if (!graph) return;
+
+      const prefix = `${idx}:`;
+
+      for (const node of graph.nodes) {
+        allNodes.push({
+          ...node,
+          id: `${prefix}${node.id}`,
+          path: node.path, // keep original path for display
+        });
+      }
+
+      for (const edge of graph.edges) {
+        allEdges.push({
+          ...edge,
+          id: `${prefix}${edge.id}`,
+          source: `${prefix}${edge.source}`,
+          target: `${prefix}${edge.target}`,
+        });
+      }
+    });
+
+    return { nodes: allNodes, edges: allEdges };
+  }, [allGraphs, projectPaths]);
+
+  // ── Spatial offsets per project ──
+  const offsets = useMemo(() => computeOffsets(projectPaths.length), [projectPaths.length]);
+
+  // ── Build simulation ──
   const [selectedNode, setSelectedNode] = useState<FileNode | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [simData, setSimData] = useState<{
@@ -765,37 +873,65 @@ export default function CosmicProjectGalaxy({
     idxMap: Map<string, number>;
   } | null>(null);
 
-  // Build simulation when graph data arrives
   useEffect(() => {
-    if (!graph || graph.nodes.length === 0) {
+    if (!mergedGraph || mergedGraph.nodes.length === 0) {
       setSimData(null);
       return;
     }
-    const sim = buildForceSim(graph.nodes, graph.edges);
+    const sim = buildForceSim(mergedGraph.nodes, mergedGraph.edges);
+
+    // Apply spatial offsets to each project's root node
+    projectPaths.forEach((path, idx) => {
+      const graph = allGraphs.get(path);
+      if (!graph) return;
+
+      // Find root node (no incoming edges)
+      const targeted = new Set(graph.edges.map((e) => e.target));
+      const root = graph.nodes.find((n) => !targeted.has(n.id));
+      if (root) {
+        const simNodeId = `${idx}:${root.id}`;
+        const simNode = sim.simNodes.find((n) => n.id === simNodeId);
+        if (simNode) {
+          simNode.pos.x += offsets[idx][0];
+          simNode.pos.y += offsets[idx][1];
+          simNode.pos.z += offsets[idx][2];
+        }
+      }
+    });
+
     setSimData(sim);
-  }, [graph]);
+  }, [mergedGraph, projectPaths, allGraphs, offsets]);
 
   const handleSelect = useCallback(
     (id: string | null) => {
       setSelectedId(id);
-      if (!id || !graph) {
+      if (!id || !mergedGraph) {
         setSelectedNode(null);
         return;
       }
-      setSelectedNode(graph.nodes.find((n) => n.id === id) ?? null);
+      // Find original node (strip prefix)
+      const originalNode = mergedGraph.nodes.find((n) => n.id === id);
+      setSelectedNode(originalNode ?? null);
     },
-    [graph],
+    [mergedGraph],
   );
 
-  const nodeCount = graph?.nodes.length ?? 0;
-  const edgeCount = graph?.edges.length ?? 0;
-  const dirCount = graph?.nodes.filter((n) => n.kind === "dir").length ?? 0;
+  // ── Stats ──
+  const nodeCount = mergedGraph?.nodes.length ?? 0;
+  const edgeCount = mergedGraph?.edges.length ?? 0;
+  const dirCount = mergedGraph?.nodes.filter((n) => n.kind === "dir").length ?? 0;
   const fileCount = nodeCount - dirCount;
+  const projectCount = projectPaths.length;
+
+  // ── Project names for title ──
+  const projectNames = useMemo(() => {
+    return projectPaths.map((p) => p.split("/").pop() || p);
+  }, [projectPaths]);
 
   return (
     <div className="relative w-full h-full" style={{ background: COLORS.bg }}>
       {/* ── 3D Canvas ── */}
-      {!loading && graph && graph.nodes.length > 0 && simData ? (
+      {!loading && mergedGraph && mergedGraph.nodes.length > 0 && simData ? (
         <Canvas
           gl={{ antialias: true, alpha: false, toneMapping: THREE.ACESFilmicToneMapping }}
           camera={{ position: [0, 20, 35], fov: 55, near: 0.1, far: 600 }}
@@ -828,7 +964,7 @@ export default function CosmicProjectGalaxy({
                 className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin mb-4"
                 style={{ borderColor: "rgba(100,96,255,0.2)", borderTopColor: "#8880ff" }}
               />
-              <p style={{ color: "#8070a0", fontSize: 13 }}>Scanning galaxy...</p>
+              <p style={{ color: "#8070a0", fontSize: 13 }}>Scanning galaxy cluster...</p>
             </>
           ) : (
             <p style={{ color: "#8070a0", fontSize: 13 }}>No data available</p>
@@ -845,13 +981,34 @@ export default function CosmicProjectGalaxy({
           className="text-2xl font-extrabold tracking-[0.15em]"
           style={{ color: "#e8e0f0", textShadow: "0 0 40px rgba(136,128,255,0.4)" }}
         >
-          PROJECT GALAXY
+          {projectCount > 1 ? "GALAXY CLUSTER" : "PROJECT GALAXY"}
         </h1>
         <p style={{ color: "#8070a0", fontSize: 12, marginTop: 2 }}>
           {nodeCount > 0
-            ? `${dirCount} planets · ${fileCount} stars · ${edgeCount} orbits`
+            ? projectCount > 1
+              ? `${projectCount} galaxies · ${dirCount} planets · ${fileCount} stars · ${edgeCount} orbits`
+              : `${dirCount} planets · ${fileCount} stars · ${edgeCount} orbits`
             : "Awaiting project..."}
         </p>
+        {projectCount > 1 && (
+          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            {projectNames.map((name, i) => (
+              <span
+                key={i}
+                style={{
+                  fontSize: 10,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                  background: "rgba(100,96,255,0.12)",
+                  color: "#8880ff",
+                  border: "1px solid rgba(100,96,255,0.15)",
+                }}
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Node Info ── */}
@@ -873,6 +1030,12 @@ export default function CosmicProjectGalaxy({
           <span>{nodeCount} nodes</span>
           <span style={{ color: "rgba(128,112,160,0.4)" }}>|</span>
           <span>{edgeCount} edges</span>
+          {projectCount > 1 && (
+            <>
+              <span style={{ color: "rgba(128,112,160,0.4)" }}>|</span>
+              <span>{projectCount} projects</span>
+            </>
+          )}
           <span style={{ color: "rgba(128,112,160,0.4)" }}>|</span>
           <span>Drag · Scroll · Click stars</span>
         </div>
@@ -880,7 +1043,7 @@ export default function CosmicProjectGalaxy({
 
       {/* ── Refresh ── */}
       <button
-        onClick={refresh}
+        onClick={refreshAll}
         className="absolute top-6 right-6 z-10 w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
         style={{ background: "rgba(8,4,32,0.6)", border: "1px solid rgba(100,96,255,0.15)" }}
       >

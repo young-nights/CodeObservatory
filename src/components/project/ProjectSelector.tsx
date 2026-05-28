@@ -1,8 +1,9 @@
 // ProjectSelector — Theme-aware, inline styles, proper hierarchy
 // Android Studio-style two-column: left nav + right content
+// Multi-project checkbox selection for galaxy clusters
 
 import { useState } from "react";
-import { FolderOpen, Plus, Loader2, Telescope, ChevronRight, FolderSearch, Settings, Moon, Sun } from "lucide-react";
+import { FolderOpen, Plus, Loader2, Telescope, ChevronRight, FolderSearch, Settings, Moon, Sun, Check } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
 import type { ProjectConfig } from "@/lib/types";
@@ -12,6 +13,9 @@ interface Props {
   isInitializing: boolean;
   onOpenProject: (path?: string) => void;
   onSelectRecent: (path: string) => void;
+  selectedProjects: string[];
+  onToggleProject: (path: string) => void;
+  onSelectAll: (paths: string[]) => void;
 }
 
 type NavItem = "projects" | "settings";
@@ -26,12 +30,14 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export function ProjectSelector({ recentProjects, isInitializing, onOpenProject, onSelectRecent }: Props) {
+export function ProjectSelector({ recentProjects, isInitializing, onOpenProject, onSelectRecent, selectedProjects, onToggleProject, onSelectAll }: Props) {
   const [nav, setNav] = useState<NavItem>("projects");
   const [hovered, setHovered] = useState<number | null>(null);
   const { theme, toggle } = useTheme();
   const { t } = useTranslation();
   const isDark = theme === "dark";
+
+  const allSelected = recentProjects.length > 0 && recentProjects.every((p) => selectedProjects.includes(p.path));
 
   const c = {
     bg: isDark ? "#08080c" : "#f5f5f7",
@@ -50,6 +56,8 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
     cardHoverBg: isDark ? "rgba(6,182,212,0.06)" : "rgba(6,182,212,0.08)",
     btnGrad: "linear-gradient(135deg, #06b6d4, #8b5cf6)",
     version: isDark ? "#3f3f46" : "#d1d5db",
+    checkBg: isDark ? "rgba(6,182,212,0.15)" : "rgba(6,182,212,0.12)",
+    checkBorder: "#06b6d4",
   };
 
   return (
@@ -128,24 +136,57 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
                   <span style={{ fontSize: 11, fontWeight: 600, color: c.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
                     {t("project.recentProjects")}
                   </span>
+                  <span style={{ flex: 1 }} />
+                  <button
+                    onClick={() => onSelectAll(allSelected ? [] : recentProjects.map((p) => p.path))}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 6, border: `1px solid ${isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)"}`, background: "transparent", color: c.textMuted, fontSize: 11, fontWeight: 500, cursor: "pointer", fontFamily: "system-ui, sans-serif", transition: "all 0.12s ease" }}
+                    onMouseEnter={e => { e.currentTarget.style.color = c.text; e.currentTarget.style.background = c.hoverBg; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = c.textMuted; e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <div style={{ width: 14, height: 14, borderRadius: 4, border: `1.5px solid ${allSelected ? c.checkBorder : isDark ? "#52525b" : "#d1d5db"}`, background: allSelected ? c.checkBg : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s ease" }}>
+                      {allSelected && <Check size={10} color={c.accent} strokeWidth={3} />}
+                    </div>
+                    {allSelected ? "Deselect all" : "Select all"}
+                  </button>
                 </div>
 
-                {recentProjects.map((proj, i) => (
-                  <div key={proj.path} onClick={() => onSelectRecent(proj.path)}
-                    onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
-                    style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, cursor: "pointer", marginBottom: 4, border: `1px solid ${hovered === i ? (isDark ? "rgba(6,182,212,0.2)" : "rgba(6,182,212,0.15)") : "transparent"}`, background: hovered === i ? c.cardHoverBg : c.cardBg, transition: "all 0.12s ease" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 9, background: hovered === i ? "rgba(6,182,212,0.15)" : (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"), flexShrink: 0, transition: "background 0.12s ease" }}>
-                      <FolderOpen size={16} color={hovered === i ? "#06b6d4" : isDark ? "#a1a1aa" : "#71717a"} />
+                {recentProjects.map((proj, i) => {
+                  const isSelected = selectedProjects.includes(proj.path);
+                  return (
+                    <div key={proj.path}
+                      onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, cursor: "pointer", marginBottom: 4, border: `1px solid ${hovered === i ? (isDark ? "rgba(6,182,212,0.2)" : "rgba(6,182,212,0.15)") : "transparent"}`, background: hovered === i ? c.cardHoverBg : c.cardBg, transition: "all 0.12s ease" }}
+                    >
+                      {/* Checkbox */}
+                      <div
+                        onClick={(e) => { e.stopPropagation(); onToggleProject(proj.path); }}
+                        style={{ width: 20, height: 20, borderRadius: 5, border: `1.5px solid ${isSelected ? c.checkBorder : isDark ? "#52525b" : "#d1d5db"}`, background: isSelected ? c.checkBg : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, transition: "all 0.12s ease" }}
+                      >
+                        {isSelected && <Check size={12} color={c.accent} strokeWidth={3} />}
+                      </div>
+
+                      {/* Folder icon — click to open single project */}
+                      <div onClick={() => onSelectRecent(proj.path)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 9, background: hovered === i ? "rgba(6,182,212,0.15)" : (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.04)"), flexShrink: 0, transition: "background 0.12s ease" }}>
+                        <FolderOpen size={16} color={hovered === i ? "#06b6d4" : isDark ? "#a1a1aa" : "#71717a"} />
+                      </div>
+
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }} onClick={() => onSelectRecent(proj.path)}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.name}</div>
+                        <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.path}</div>
+                      </div>
+
+                      <span style={{ fontSize: 12, color: isDark ? "#71717a" : "#9ca3af", flexShrink: 0, fontVariantNumeric: "tabular-nums" as const }}>{fmtTime(proj.lastOpened)}</span>
+                      <ChevronRight size={14} color={hovered === i ? c.accent : (isDark ? "#52525b" : "#d1d5db")} style={{ flexShrink: 0, transition: "all 0.12s ease", transform: hovered === i ? "translateX(2px)" : "none" }} />
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: c.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.name}</div>
-                      <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.path}</div>
-                    </div>
-                    <span style={{ fontSize: 12, color: isDark ? "#71717a" : "#9ca3af", flexShrink: 0, fontVariantNumeric: "tabular-nums" as const }}>{fmtTime(proj.lastOpened)}</span>
-                    <ChevronRight size={14} color={hovered === i ? c.accent : (isDark ? "#52525b" : "#d1d5db")} style={{ flexShrink: 0, transition: "all 0.12s ease", transform: hovered === i ? "translateX(2px)" : "none" }} />
+                  );
+                })}
+
+                {selectedProjects.length > 0 && (
+                  <div style={{ marginTop: 12, fontSize: 12, color: c.textMuted, fontFamily: "system-ui, sans-serif" }}>
+                    {selectedProjects.length} project{selectedProjects.length !== 1 ? "s" : ""} selected for galaxy cluster view
                   </div>
-                ))}
+                )}
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", maxWidth: 320, margin: "0 auto", textAlign: "center" }}>
