@@ -166,7 +166,10 @@ export function useGraph(projectPath: string | null) {
   return { graph, loading, refresh: fetchGraph };
 }
 
-/** Hook that scans a project directory and builds a cosmic file-tree graph */
+/** Hook that scans a project directory and builds a cosmic file-tree graph.
+ *  Frontend-level in-memory cache prevents re-scan on component remount. */
+const scanCache = new Map<string, { data: GraphData; ts: number }>();
+
 export function useScanGraph(projectPath: string | null) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -176,10 +179,19 @@ export function useScanGraph(projectPath: string | null) {
       setGraph(null);
       return;
     }
+
+    // Check frontend cache first — instant return on remount
+    const cached = scanCache.get(projectPath);
+    if (cached) {
+      setGraph(cached.data);
+      return;
+    }
+
     setLoading(true);
     try {
       const data = await api.scanDirectory(projectPath);
       setGraph(data);
+      scanCache.set(projectPath, { data, ts: Date.now() });
     } catch (err) {
       console.error("Failed to scan directory:", err);
       setGraph(null);

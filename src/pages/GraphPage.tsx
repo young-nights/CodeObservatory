@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import ProjectGalaxy from "@/components/graph/ProjectGalaxy";
+import CosmicProjectGalaxy from "@/components/graph/CosmicProjectGalaxy";
 import { SidebarContext } from "@/components/layout/AppShell";
 
 interface GraphPageProps { projectPath: string; }
@@ -14,7 +14,7 @@ export function GraphPage({ projectPath }: GraphPageProps) {
   
   return (
     <ErrorBoundary fallback={<div style={{ padding: 40, color: "#ff6b6b" }}>Graph failed to load. Check console for errors.</div>}>
-      <ProjectGalaxy projectPath={projectPath} fullscreen={collapsed} />
+      <CosmicProjectGalaxy projectPath={projectPath} fullscreen={collapsed} />
     </ErrorBoundary>
   );
 }
