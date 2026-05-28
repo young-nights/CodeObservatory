@@ -70,15 +70,15 @@ interface SimLink {
 // 3D Force Sim — n-body + spring + center gravity
 // ══════════════════════════════════════════════════
 const SIM = {
-  chargeBase: -350,
-  chargeSettleBonus: 3,
-  linkDistance: 10,
-  linkStrength: 0.12,
-  centerStrength: 0.035,
-  velocityDecay: 0.32,
-  maxVelocity: 8,
-  maxRadius: 30,        // hard position clamp — compact galaxy
-  elasticPower: 1.8,    // gravity grows as dist^elasticPower (stronger rubber-band)
+  chargeBase: -200,
+  chargeSettleBonus: 2,
+  linkDistance: 6,
+  linkStrength: 0.2,
+  centerStrength: 0.08,
+  velocityDecay: 0.35,
+  maxVelocity: 6,
+  maxRadius: 15,        // hard position clamp — compact galaxy
+  elasticPower: 2.0,    // gravity grows as dist^elasticPower (strong rubber-band)
 };
 
 function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNode[]; simLinks: SimLink[]; tick: () => void } {
@@ -113,7 +113,7 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
     const isRoot = depth === 0 && isDir;
     const phi = Math.acos(1 - 2 * (i + 0.5) / nodes.length);
     const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-    const baseR = isRoot ? 0 : depth * 4 + 1.5;
+    const baseR = isRoot ? 0 : depth * 2 + 0.5;
     return {
       id: n.id,
       pos: new THREE.Vector3(
@@ -142,7 +142,7 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
   }));
 
   // Pre-settle: many iterations before rendering
-  const preSettleTicks = 400;
+  const preSettleTicks = 200;
   for (let t = 0; t < preSettleTicks; t++) {
     tickOnce(SIM.chargeBase * (1 + SIM.chargeSettleBonus * (1 - t / preSettleTicks)), 1.0);
   }
@@ -199,7 +199,7 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
       const d = Math.sqrt(a.pos.x * a.pos.x + a.pos.y * a.pos.y + a.pos.z * a.pos.z);
       if (d < 0.01) continue;
       // Gravity grows with distance^elasticPower — acts like a rubber band
-      const pull = Math.min(Math.pow(d, SIM.elasticPower - 1) * SIM.centerStrength * 5, 6);
+      const pull = Math.min(Math.pow(d, SIM.elasticPower - 1) * SIM.centerStrength * 10, 8);
       a.vx -= a.pos.x * pull / d;
       a.vy -= a.pos.y * pull / d;
       a.vz -= a.pos.z * pull / d;
