@@ -12,8 +12,9 @@ import type { FileNode, FileEdge } from "@/lib/types";
 import { FolderOpen, File, Clock, Hash, X } from "lucide-react";
 
 // ══════════════════════════════════════════════════
-// Color Palette
+// Color Palette — Category-based with per-extension accents
 // ══════════════════════════════════════════════════
+
 const COLORS = {
   bg: "#000011",
   dirCyan: "#00e5ff",
@@ -28,14 +29,46 @@ const COLORS = {
     default: "#8ba0c0",
   } as Record<string, string>,
   edgeRootDir: "#a080ff",
-  edgeDirFile: "#4030a0",
-  edgeDirDir: "#6040c0",
+  edgeDirFile: "#6050c0",
+  edgeDirDir: "#6050c0",
   particleFlow: "#8880ff",
 };
 
 // ══════════════════════════════════════════════════
-// Helpers
+// Helpers — Category classification + colors
 // ══════════════════════════════════════════════════
+
+/** Programming language extensions */
+const PROG_EXTS = new Set(["ts","tsx","mts","cts","js","jsx","mjs","cjs","rs","py","pyi",
+  "c","cc","cpp","cxx","h","hh","hpp","hxx","go","java","kt","kts","swift","rb","lua",
+  "vue","svelte","astro","proto","sql","sh","bash","zsh","php"]);
+const STYLE_EXTS = new Set(["css","scss","sass","less"]);
+const MARKUP_EXTS = new Set(["html","htm","xml","svg"]);
+const CONFIG_EXTS = new Set(["json","toml","yaml","yml"]);
+const DOC_EXTS = new Set(["md","mdx","rst","txt"]);
+
+type CatKey = "source" | "style" | "markup" | "config" | "document";
+
+function getCategory(ext?: string): CatKey | null {
+  if (!ext) return null;
+  const e = ext.toLowerCase();
+  if (PROG_EXTS.has(e)) return "source";
+  if (STYLE_EXTS.has(e)) return "style";
+  if (MARKUP_EXTS.has(e)) return "markup";
+  if (CONFIG_EXTS.has(e)) return "config";
+  if (DOC_EXTS.has(e)) return "document";
+  return null;
+}
+
+/** Spatial bias per category — clusters similar file types together */
+const CAT_BIAS: Record<CatKey, [number, number, number]> = {
+  source: [4, 0, 0],    // +X hemisphere
+  style: [-3, 3, 0],    // -X, +Y
+  markup: [0, 3, 3],    // center +Y, +Z
+  config: [-3, -2, 2],
+  document: [2, 0, -3],
+};
+
 function getFileColor(ext?: string): string {
   if (!ext) return COLORS.fileColors.default;
   return COLORS.fileColors[ext.toLowerCase()] ?? COLORS.fileColors.default;
@@ -68,25 +101,25 @@ interface SimLink {
 // SIM Constants
 // ══════════════════════════════════════════════════
 const SIM = {
-  chargeBase: -200,
-  linkDistance: 6,
-  linkStrength: 0.2,
-  centerStrength: 0.08,
-  velocityDecay: 0.35,
+  chargeBase: -400,
+  linkDistance: 9,
+  linkStrength: 0.15,
+  centerStrength: 0.06,
+  velocityDecay: 0.32,
   maxVelocity: 6,
-  maxRadius: 15,
-  elasticPower: 2.0,
+  maxRadius: 18,
+  elasticPower: 1.8,
 };
 
 // ══════════════════════════════════════════════════
 // Progressive Settle Config
 // ══════════════════════════════════════════════════
 const WARMUP = {
-  frames: 600,
-  chargeStart: 5,
-  chargeEnd: 0.5,
-  decayStart: 0.7,
-  decayEnd: 0.35,
+  frames: 400,
+  chargeStart: 4,
+  chargeEnd: 1.0,
+  decayStart: 0.65,
+  decayEnd: 0.32,
 };
 
 // ══════════════════════════════════════════════════
@@ -125,20 +158,28 @@ function buildForceSim(
     }
   }
 
-  // Fibonacci sphere init
+  // Fibonacci sphere init — with category clustering bias
   const simNodes: SimNode[] = nodes.map((n, i) => {
     const depth = depthMap.get(n.id) ?? 2;
     const isDir = n.kind === "dir";
     const isRoot = depth === 0 && isDir;
     const phi = Math.acos(1 - 2 * (i + 0.5) / nodes.length);
     const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-    const baseR = isRoot ? 0 : depth * 2 + 0.5;
+    const baseR = isRoot ? 0 : depth * 2.5 + 1;
+
+    // Category spatial bias — cluster similar file types
+    let bx = 0, by = 0, bz = 0;
+    const cat = getCategory(n.extension);
+    if (!isDir && cat && CAT_BIAS[cat]) {
+      [bx, by, bz] = CAT_BIAS[cat];
+    }
+
     return {
       id: n.id,
       pos: new THREE.Vector3(
-        baseR * Math.sin(phi) * Math.cos(theta) + (Math.random() - 0.5) * 2,
-        baseR * Math.sin(phi) * Math.sin(theta) + (Math.random() - 0.5) * 4,
-        baseR * Math.cos(phi),
+        baseR * Math.sin(phi) * Math.cos(theta) + bx + (Math.random() - 0.5) * 2,
+        baseR * Math.sin(phi) * Math.sin(theta) + by + (Math.random() - 0.5) * 4,
+        baseR * Math.cos(phi) + bz,
       ),
       vx: 0, vy: 0, vz: 0,
       type: isRoot ? "root" : isDir ? "dir" : "file",
@@ -309,7 +350,7 @@ function GalaxyScene({
     simNodes.forEach((n, i) => {
       const hex = n.type === "dir" || n.type === "root"
         ? getDirColor(n.depth) : getFileColor(n.extension);
-      const baseScale = n.type === "root" ? 1.2 : n.type === "dir" ? 0.55 : 0.3;
+      const baseScale = n.type === "root" ? 1.6 : n.type === "dir" ? 0.65 : 0.35;
       map.set(i, {
         id: n.id, label: n.label, type: n.type, depth: n.depth,
         extension: n.extension, path: n.path, sizeBytes: n.sizeBytes,
@@ -322,11 +363,11 @@ function GalaxyScene({
   // ── Node geometry & material ────────────
   const sphereGeo = useMemo(() => new THREE.SphereGeometry(1, 16, 16), []);
   const nodeMat = useMemo(() => new THREE.MeshStandardMaterial({
-    roughness: 0.3,
-    metalness: 0.1,
+    roughness: 0.25,
+    metalness: 0.05,
     toneMapped: false,
     emissive: new THREE.Color("#ffffff"),
-    emissiveIntensity: 0.8,
+    emissiveIntensity: 1.4,
   }), []);
 
   // ── Edge colors (pre-computed) ──────────
@@ -590,7 +631,7 @@ function GalaxyScene({
           <lineBasicMaterial
             vertexColors
             transparent
-            opacity={0.22}
+            opacity={0.4}
             toneMapped={false}
             depthWrite
           />
@@ -642,11 +683,11 @@ function GalaxyScene({
       {/* Bloom */}
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.05}
-          intensity={2.5}
-          radius={1.1}
+          luminanceThreshold={0.03}
+          intensity={3.0}
+          radius={1.2}
           mipmapBlur
-          luminanceSmoothing={0.8}
+          luminanceSmoothing={0.7}
         />
       </EffectComposer>
     </>
