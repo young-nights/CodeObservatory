@@ -29,10 +29,10 @@ const COLORS = {
     vue: "#40b080", svelte: "#e06040", kt: "#8060e0", swift: "#e07040",
     default: "#8090b0",
   } as Record<string, string>,
-  edgeRootDir: "#4070c0",
-  edgeDirFile: "#3050a0",
-  edgeDirDir: "#3060b0",
-  particleFlow: "#6090d0",
+  edgeRootDir: "#c0d8ff",
+  edgeDirFile: "#8098c0",
+  edgeDirDir: "#8098c0",
+  particleFlow: "#c0d8ff",
   nodeEmissive: "#c0d8ff",
 };
 
@@ -80,8 +80,8 @@ function getDirColor(depth: number): string {
 }
 
 /** All nodes share the same uniform size — perspective creates depth */
-const UNIFORM_NODE_SCALE = 0.35;
-const ROOT_NODE_SCALE = 0.8;  // cluster center, slightly larger
+const UNIFORM_NODE_SCALE = 0.3;
+const ROOT_NODE_SCALE = 0.6;  // cluster center, slightly larger
 const NODE_SEGMENTS = 12;      // lower poly for performance
 
 // ══════════════════════════════════════════════════
@@ -108,14 +108,14 @@ interface SimLink {
 // SIM Constants
 // ══════════════════════════════════════════════════
 const SIM = {
-  chargeBase: -600,
-  linkDistance: 12,
-  linkStrength: 0.1,
-  centerStrength: 0.04,
-  velocityDecay: 0.3,
+  chargeBase: -800,
+  linkDistance: 15,
+  linkStrength: 0.08,
+  centerStrength: 0.025,
+  velocityDecay: 0.28,
   maxVelocity: 5,
-  maxRadius: 25,
-  elasticPower: 1.6,
+  maxRadius: 35,
+  elasticPower: 1.5,
 };
 
 // ══════════════════════════════════════════════════
@@ -392,7 +392,7 @@ function GalaxyScene({
     metalness: 0.1,
     toneMapped: false,
     emissive: new THREE.Color(COLORS.nodeEmissive),
-    emissiveIntensity: 0.8,
+    emissiveIntensity: 0.6,
   }), []);
 
   // ── Edge colors (pre-computed) ──────────
@@ -656,7 +656,7 @@ function GalaxyScene({
           <lineBasicMaterial
             vertexColors
             transparent
-            opacity={0.25}
+            opacity={0.4}
             toneMapped={false}
             depthWrite={false}
           />
