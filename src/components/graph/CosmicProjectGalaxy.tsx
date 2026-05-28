@@ -1,5 +1,5 @@
-// CosmicProjectGalaxy — ForceGraph3D + Extreme Bloom + Rich Colors
-// Target: https://meet-blog.buyixiao.xyz/ — dense multi-color galaxy explosion
+// CosmicProjectGalaxy — ForceGraph3D + Natural Bloom + Uniform Nodes + Rich Colors
+// All nodes same size, no glowMesh, bloom via UnrealBloomPass only
 
 import { useRef, useMemo, useState, useCallback, useEffect } from "react";
 import ForceGraph3D from "react-force-graph-3d";
@@ -12,72 +12,54 @@ import type { GraphData } from "@/lib/types";
 import { X } from "lucide-react";
 
 // ══════════════════════════════════════════════════
-// Color System — maximum diversity
+// Color System
 // ══════════════════════════════════════════════════
-const NODE_COLORS: Record<string, string> = {
-  // Directories — warm gold family (varied by depth)
-  "_dir_root": "#ffe070",
-  "_dir_1": "#ffd040",
-  "_dir_2": "#e8b030",
-  "_dir_default": "#d0a020",
-  // Source code — cool cyan/teal
+const COLORS: Record<string, string> = {
+  "_dir_root": "#ffe070", "_dir_1": "#ffd040", "_dir_2": "#e8b030", "_dir_def": "#d0a020",
   "ts": "#00e5ff", "tsx": "#00d4ee", "js": "#40e0d0", "jsx": "#50d0c0",
   "rs": "#ff6050", "py": "#00bcd4", "go": "#00acc1", "java": "#ff8f00",
   "c": "#78909c", "cpp": "#78909c", "h": "#90a4ae", "hpp": "#90a4ae",
   "vue": "#4caf50", "svelte": "#ff3d00", "kt": "#7c4dff", "swift": "#ff6e40",
   "rb": "#e53935", "lua": "#5c6bc0", "php": "#7e57c2",
-  // Documents — bright white/cream
-  "md": "#ffffff", "mdx": "#f5f5ff", "rst": "#e8e8f0", "txt": "#d0d0e0",
-  // Styles — green family
-  "css": "#66bb6a", "scss": "#81c784", "less": "#a5d6a7", "sass": "#69f0ae",
-  // Markup
+  "md": "#ffffff", "mdx": "#f0f0ff", "rst": "#e0e0f0", "txt": "#c8c8e0",
+  "css": "#66bb6a", "scss": "#81c784", "less": "#a5d6a7",
   "html": "#ff7043", "xml": "#ff8a65", "svg": "#ffab91",
-  // Config/data — orange/yellow
   "json": "#ffd54f", "toml": "#ffca28", "yaml": "#ffc107", "yml": "#ffb300",
-  // Default
   "_default": "#b0bec5",
 };
 
-function getNodeColor(node: any): string {
-  if (node.kind === "dir") {
-    if (node.depth === 0) return NODE_COLORS["_dir_root"];
-    if (node.depth === 1) return NODE_COLORS["_dir_1"];
-    if (node.depth === 2) return NODE_COLORS["_dir_2"];
-    return NODE_COLORS["_dir_default"];
+function nodeColor(n: any): string {
+  if (n.kind === "dir") {
+    if (n.depth === 0) return COLORS["_dir_root"];
+    if (n.depth === 1) return COLORS["_dir_1"];
+    if (n.depth === 2) return COLORS["_dir_2"];
+    return COLORS["_dir_def"];
   }
-  const ext = (node.extension || "").toLowerCase();
-  return NODE_COLORS[ext] || NODE_COLORS["_default"];
+  return COLORS[(n.extension || "").toLowerCase()] || COLORS["_default"];
 }
 
 // ══════════════════════════════════════════════════
-// Starfield — multi-layer depth
+// Starfield — 3-layer depth
 // ══════════════════════════════════════════════════
-function createStarfield(): THREE.Group {
-  const group = new THREE.Group();
-  const layers = [
-    { count: 4000, radius: 300, size: 0.2, opacity: 0.3 },   // far dim
-    { count: 3000, radius: 200, size: 0.5, opacity: 0.5 },   // mid
-    { count: 2000, radius: 120, size: 0.8, opacity: 0.7 },   // near bright
-  ];
-  for (const { count, radius, size, opacity } of layers) {
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const θ = Math.random() * Math.PI * 2;
-      const φ = Math.acos(2 * Math.random() - 1);
-      const r = radius * (0.3 + Math.random() * 0.7);
-      pos[i * 3] = r * Math.sin(φ) * Math.cos(θ);
-      pos[i * 3 + 1] = r * Math.sin(φ) * Math.sin(θ);
-      pos[i * 3 + 2] = r * Math.cos(φ);
+function makeStarfield(): THREE.Group {
+  const g = new THREE.Group();
+  [[4000, 300, 0.25, 0.3], [3000, 180, 0.45, 0.5], [2000, 100, 0.7, 0.65]].forEach(([cnt, rad, sz, op]) => {
+    const p = new Float32Array((cnt as number) * 3);
+    for (let i = 0; i < (cnt as number); i++) {
+      const θ = Math.random() * Math.PI * 2, φ = Math.acos(2 * Math.random() - 1);
+      const r = (rad as number) * (0.3 + Math.random() * 0.7);
+      p[i * 3] = r * Math.sin(φ) * Math.cos(θ);
+      p[i * 3 + 1] = r * Math.sin(φ) * Math.sin(θ);
+      p[i * 3 + 2] = r * Math.cos(φ);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const colors = ["#c8d8ff", "#d0e0ff", "#e0e8ff"];
-    group.add(new THREE.Points(geo, new THREE.PointsMaterial({
-      size, color: colors[Math.floor(Math.random() * colors.length)],
-      transparent: true, opacity, sizeAttenuation: true, depthWrite: false,
+    geo.setAttribute("position", new THREE.BufferAttribute(p, 3));
+    g.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      size: sz as number, color: "#d0e0ff", transparent: true,
+      opacity: op as number, sizeAttenuation: true, depthWrite: false,
     })));
-  }
-  return group;
+  });
+  return g;
 }
 
 // ══════════════════════════════════════════════════
@@ -92,7 +74,7 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const fgRef = useRef<any>(null);
   const composerRef = useRef<EffectComposer | null>(null);
-  const sfAdded = useRef(false);
+  const sfDone = useRef(false);
 
   // ── Scan + merge ──
   useEffect(() => {
@@ -133,29 +115,26 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
     return () => { dead = true; };
   }, [projectPaths]);
 
-  // ── Degree + adjacency ──
-  const { deg, adj } = useMemo(() => {
-    const d = new Map<string, number>(), a = new Map<string, Set<string>>();
-    if (!graphData) return { deg: d, adj: a };
+  // ── Adjacency ──
+  const adj = useMemo(() => {
+    const a = new Map<string, Set<string>>();
+    if (!graphData) return a;
     for (const l of graphData.links) {
       const s = typeof l.source === "object" ? l.source.id : l.source;
       const t = typeof l.target === "object" ? l.target.id : l.target;
-      d.set(s, (d.get(s) || 0) + 1);
-      d.set(t, (d.get(t) || 0) + 1);
-      if (!a.has(s)) a.set(s, new Set());
-      if (!a.has(t)) a.set(t, new Set());
-      a.get(s)!.add(t); a.get(t)!.add(s);
+      if (!a.has(s)) a.set(s, new Set()); a.get(s)!.add(t);
+      if (!a.has(t)) a.set(t, new Set()); a.get(t)!.add(s);
     }
-    return { deg: d, adj: a };
+    return a;
   }, [graphData]);
 
-  // ── Scene setup ──
+  // ── Scene: starfield + bloom ──
   useEffect(() => {
     if (!fgRef.current) return;
     const fg = fgRef.current;
-    if (!sfAdded.current) {
+    if (!sfDone.current) {
       const sc = fg.scene?.();
-      if (sc) { sc.add(createStarfield()); sfAdded.current = true; }
+      if (sc) { sc.add(makeStarfield()); sfDone.current = true; }
     }
     if (!composerRef.current) {
       const r = fg.renderer?.(), s = fg.scene?.(), c = fg.camera?.();
@@ -164,9 +143,9 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
         comp.addPass(new RenderPass(s, c));
         comp.addPass(new UnrealBloomPass(
           new THREE.Vector2(window.innerWidth, window.innerHeight),
-          2.5,   // strength — very strong for star-burst
-          1.0,   // radius — wide glow
-          0.08   // threshold — catch most nodes
+          1.8,   // strength — natural star glow
+          0.5,   // radius — tight, not big disk
+          0.2    // threshold — only bright nodes bloom
         ));
         composerRef.current = comp;
       }
@@ -211,81 +190,57 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
         width={window.innerWidth}
         height={window.innerHeight}
         showNavInfo={false}
-        // ── Node: big size range + rich colors ──
-        nodeVal={(n: any) => {
-          const d = deg.get(n.id) || 0;
-          return (n.kind === "dir" ? 5 : 2) + d * 0.8; // BIG range
-        }}
-        nodeColor={(n: any) => getNodeColor(n)}
+        // ── Node: uniform size, rich color, NO glowMesh ──
+        nodeVal={() => 3}                    // fixed size for all
+        nodeColor={(n: any) => nodeColor(n)}
         nodeOpacity={0.95}
-        nodeResolution={24}
+        nodeResolution={20}
         nodeLabel={nodeLabel}
         nodeThreeObject={(node: any) => {
-          const d = deg.get(node.id) || 0;
-          const isDir = node.kind === "dir";
-          const isRoot = node.depth === 0;
-          // Size: root 5, dir 3, file 1.2, + degree scaling
-          const sz = (isRoot ? 5 : isDir ? 3 : 1.2) + d * 0.35;
-          const col = new THREE.Color(getNodeColor(node));
+          const col = new THREE.Color(nodeColor(node));
           const isHov = hoveredNode === node.id;
           const isConnected = hoveredNode ? adj.get(hoveredNode)?.has(node.id) : false;
           const dimmed = hoveredNode && !isHov && !isConnected;
 
-          const g = new THREE.Group();
-
-          // Core sphere — bright, emissive
-          const coreMat = new THREE.MeshStandardMaterial({
-            color: dimmed ? col.clone().multiplyScalar(0.2) : col,
+          // Single sphere — no glowMesh
+          const mat = new THREE.MeshStandardMaterial({
+            color: dimmed ? col.clone().multiplyScalar(0.25) : col,
             emissive: dimmed ? new THREE.Color(0) : col,
-            emissiveIntensity: isRoot ? 5 : isDir ? 3 : isHov ? 3.5 : 1.8,
-            roughness: 0.08,
-            metalness: 0.15,
+            emissiveIntensity: dimmed ? 0 : 0.7,
+            roughness: 0.2,
+            metalness: 0.1,
             transparent: true,
-            opacity: dimmed ? 0.2 : 0.95,
+            opacity: dimmed ? 0.25 : 0.95,
             toneMapped: false,
           });
-          g.add(new THREE.Mesh(new THREE.SphereGeometry(sz, 24, 24), coreMat));
-
-          // Outer glow — big halo
-          if (!dimmed) {
-            const gs = isRoot ? sz * 5 : isDir ? sz * 3.5 : sz * 2.5;
-            g.add(new THREE.Mesh(
-              new THREE.SphereGeometry(gs, 16, 16),
-              new THREE.MeshBasicMaterial({
-                color: col, transparent: true,
-                opacity: isRoot ? 0.3 : isDir ? 0.15 : isHov ? 0.2 : 0.06,
-                side: THREE.BackSide, toneMapped: false,
-              })
-            ));
-          }
-          return g;
+          return new THREE.Mesh(new THREE.SphereGeometry(3, 16, 16), mat);
         }}
         nodeThreeObjectExtend={false}
-        // ── Links: colorful, thin ──
+        // ── Links: colorful, thin, dreamy ──
         linkColor={(l: any) => {
           const s = typeof l.source === "object" ? l.source : null;
-          return s ? getNodeColor(s) : "#6080b0";
+          return s ? nodeColor(s) : "#6080b0";
         }}
-        linkOpacity={0.2}
+        linkOpacity={0.22}
         linkWidth={(l: any) => {
           const s = typeof l.source === "object" ? l.source : null;
-          return s?.kind === "dir" ? 1.0 : 0.4;
+          return s?.kind === "dir" ? 0.8 : 0.3;
         }}
-        linkCurvature={0.1}
+        linkCurvature={0.08}
         linkResolution={6}
         linkDirectionalParticles={(l: any) => {
           const s = typeof l.source === "object" ? l.source : null;
-          return s?.kind === "dir" ? 3 : 0;
+          return s?.kind === "dir" ? 2 : 0;
         }}
-        linkDirectionalParticleWidth={0.6}
-        linkDirectionalParticleSpeed={0.004}
+        linkDirectionalParticleWidth={0.5}
+        linkDirectionalParticleSpeed={0.003}
         linkDirectionalParticleColor={(l: any) => {
           const s = typeof l.source === "object" ? l.source : null;
-          return s ? getNodeColor(s) : "#80b0ff";
+          return s ? nodeColor(s) : "#80b0ff";
         }}
-        // ── Force ──
-        d3AlphaDecay={0.012}
-        d3VelocityDecay={0.2}
+        // ── Force: natural spread ──
+        d3AlphaDecay={0.015}
+        d3VelocityDecay={0.25}
         warmupTicks={60}
         cooldownTicks={100}
         cooldownTime={10000}
@@ -297,7 +252,7 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
 
       {/* Title */}
       <div className="absolute top-6 left-8 z-10 select-none pointer-events-none" style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
-        <h1 className="text-2xl font-extrabold tracking-[0.15em]" style={{ color: "#e8e0f0", textShadow: "0 0 40px rgba(200,180,100,0.3)" }}>
+        <h1 className="text-2xl font-extrabold tracking-[0.15em]" style={{ color: "#e8e0f0", textShadow: "0 0 30px rgba(150,150,255,0.2)" }}>
           {new Set(graphData.nodes.map((n: any) => n.projectPath)).size > 1 ? "GALAXY CLUSTER" : "PROJECT GALAXY"}
         </h1>
         <p style={{ color: "#8070a0", fontSize: 12, marginTop: 2 }}>{dc} planets · {nc - dc} stars · {ec} orbits</p>
@@ -314,7 +269,7 @@ export default function CosmicProjectGalaxy({ projectPaths }: Props) {
           <p className="break-all text-xs mb-3" style={{ color: "#8070a0" }}>{selectedNode.path}</p>
           <div className="flex flex-wrap gap-2 mb-3">
             <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-              style={{ background: getNodeColor(selectedNode) + "30", color: getNodeColor(selectedNode) }}>
+              style={{ background: nodeColor(selectedNode) + "30", color: nodeColor(selectedNode) }}>
               {selectedNode.kind === "dir" ? "📁 Directory" : `📄 .${selectedNode.extension || "file"}`}
             </span>
             {selectedNode.size > 0 && (
