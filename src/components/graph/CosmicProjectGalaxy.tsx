@@ -77,8 +77,8 @@ const SIM = {
   centerStrength: 0.035,
   velocityDecay: 0.32,
   maxVelocity: 8,
-  maxRadius: 55,        // hard position clamp — nodes beyond this are pulled back
-  elasticPower: 1.6,    // gravity grows as dist^elasticPower (non-linear rubber-band)
+  maxRadius: 30,        // hard position clamp — compact galaxy
+  elasticPower: 1.8,    // gravity grows as dist^elasticPower (stronger rubber-band)
 };
 
 function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNode[]; simLinks: SimLink[]; tick: () => void } {
@@ -619,7 +619,7 @@ function GalaxyScene({ simNodes, simLinks, selectedId, onSelectNode, tick }: Gal
       // Position camera to see full bounding sphere (fov=55°)
       const fov = 55 * Math.PI / 180;
       const dist = (maxR / Math.sin(fov / 2)) * 1.15; // 15% margin
-      const camDist = Math.min(Math.max(dist, 20), 100); // clamp between 20-100
+      const camDist = Math.max(dist, 20); // no upper limit — let camera see everything
       camera.position.set(cx, cy + camDist * 0.5, cz + camDist);
       camera.lookAt(cx, cy, cz);
     }
@@ -763,7 +763,7 @@ export default function CosmicProjectGalaxy({ projectPath, fullscreen = false }:
           <OrbitControls
             enableDamping dampingFactor={0.08}
             autoRotate autoRotateSpeed={0.35}
-            minDistance={5} maxDistance={120}
+            minDistance={5} maxDistance={300}
             maxPolarAngle={Math.PI * 0.75}
           />
         </Canvas>
