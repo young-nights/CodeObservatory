@@ -70,13 +70,13 @@ interface SimLink {
 // 3D Force Sim — n-body + spring + center gravity
 // ══════════════════════════════════════════════════
 const SIM = {
-  chargeBase: -800,
-  chargeSettleBonus: 5,   // extra repulsion during early ticks
-  linkDistance: 14,
-  linkStrength: 0.06,
-  centerStrength: 0.012,
-  velocityDecay: 0.28,
-  maxVelocity: 10,
+  chargeBase: -350,
+  chargeSettleBonus: 3,   // extra repulsion during early ticks
+  linkDistance: 10,
+  linkStrength: 0.12,
+  centerStrength: 0.035,
+  velocityDecay: 0.32,
+  maxVelocity: 8,
 };
 
 function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNode[]; simLinks: SimLink[]; tick: () => void } {
@@ -111,7 +111,7 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
     const isRoot = depth === 0 && isDir;
     const phi = Math.acos(1 - 2 * (i + 0.5) / nodes.length);
     const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-    const baseR = isRoot ? 0 : depth * 6 + 2;
+    const baseR = isRoot ? 0 : depth * 4 + 1.5;
     return {
       id: n.id,
       pos: new THREE.Vector3(
@@ -249,8 +249,8 @@ function StarNode({
   const isDir = node.type === "dir" || node.type === "root";
   const isRoot = node.type === "root";
   const color = isDir ? getDirColor(node.depth) : getFileColor(node.extension);
-  const sphereSize = isRoot ? 1.2 : isDir ? 0.55 : 0.18;
-  const emIntensity = isRoot ? 2.8 : isDir ? 1.5 : 0.8;
+  const sphereSize = isRoot ? 1.2 : isDir ? 0.55 : 0.3;
+  const emIntensity = isRoot ? 2.8 : isDir ? 1.5 : 1.2;
 
   // Sync position from mutable Vector3
   useFrame((_, delta) => {
@@ -620,11 +620,11 @@ function GalaxyScene({ simNodes, simLinks, selectedId, onSelectNode, tick }: Gal
       {/* Bloom */}
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.08}
-          intensity={2.0}
-          radius={0.9}
+          luminanceThreshold={0.05}
+          intensity={2.5}
+          radius={1.1}
           mipmapBlur
-          luminanceSmoothing={0.9}
+          luminanceSmoothing={0.8}
         />
       </EffectComposer>
     </>
@@ -722,7 +722,7 @@ export default function CosmicProjectGalaxy({ projectPath, fullscreen = false }:
           <OrbitControls
             enableDamping dampingFactor={0.08}
             autoRotate autoRotateSpeed={0.35}
-            minDistance={5} maxDistance={250}
+            minDistance={5} maxDistance={120}
             maxPolarAngle={Math.PI * 0.75}
           />
         </Canvas>
