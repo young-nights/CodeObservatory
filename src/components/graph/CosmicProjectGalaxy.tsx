@@ -71,12 +71,14 @@ interface SimLink {
 // ══════════════════════════════════════════════════
 const SIM = {
   chargeBase: -350,
-  chargeSettleBonus: 3,   // extra repulsion during early ticks
+  chargeSettleBonus: 3,
   linkDistance: 10,
   linkStrength: 0.12,
   centerStrength: 0.035,
   velocityDecay: 0.32,
   maxVelocity: 8,
+  maxRadius: 55,        // hard position clamp — nodes beyond this are pulled back
+  elasticPower: 1.6,    // gravity grows as dist^elasticPower (non-linear rubber-band)
 };
 
 function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNode[]; simLinks: SimLink[]; tick: () => void } {
@@ -190,13 +192,14 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
       if (!b.fixed) { b.vx -= dx * force; b.vy -= dy * force; b.vz -= dz * force; }
     }
 
-    // --- Center gravity ---
+    // --- Center gravity (non-linear: stronger at distance) ---
     for (let i = 0; i < nCount; i++) {
       const a = simNodes[i];
       if (a.fixed) continue;
       const d = Math.sqrt(a.pos.x * a.pos.x + a.pos.y * a.pos.y + a.pos.z * a.pos.z);
       if (d < 0.01) continue;
-      const pull = Math.min(d * SIM.centerStrength, 2);
+      // Gravity grows with distance^elasticPower — acts like a rubber band
+      const pull = Math.min(Math.pow(d, SIM.elasticPower - 1) * SIM.centerStrength * 5, 6);
       a.vx -= a.pos.x * pull / d;
       a.vy -= a.pos.y * pull / d;
       a.vz -= a.pos.z * pull / d;
@@ -214,6 +217,22 @@ function buildForceSim(nodes: FileNode[], edges: FileEdge[]): { simNodes: SimNod
       a.pos.x += a.vx;
       a.pos.y += a.vy;
       a.pos.z += a.vz;
+
+      // Hard clamp: if node exceeds maxRadius, pull it back proportionally
+      const dist = Math.sqrt(a.pos.x * a.pos.x + a.pos.y * a.pos.y + a.pos.z * a.pos.z);
+      if (dist > SIM.maxRadius) {
+        const scale = SIM.maxRadius / dist;
+        a.pos.x *= scale;
+        a.pos.y *= scale;
+        a.pos.z *= scale;
+        // Dampen velocity outward to prevent re-escape
+        const dot = (a.pos.x * a.vx + a.pos.y * a.vy + a.pos.z * a.vz) / dist;
+        if (dot > 0) {
+          a.vx -= (dot * a.pos.x / dist);
+          a.vy -= (dot * a.pos.y / dist);
+          a.vz -= (dot * a.pos.z / dist);
+        }
+      }
     }
   }
 
@@ -574,16 +593,37 @@ interface GalaxySceneProps {
 function GalaxyScene({ simNodes, simLinks, selectedId, onSelectNode, tick }: GalaxySceneProps) {
   const { camera } = useThree();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const fittedRef = useRef(false);
+  const tickCountRef = useRef(0);
 
-  // Continuous simulation tick
+  // Continuous simulation tick + auto-fit after settle
   useFrame(() => {
     tick();
-  });
+    tickCountRef.current++;
 
-  useEffect(() => {
-    camera.position.set(0, 20, 35);
-    camera.lookAt(0, 0, 0);
-  }, [camera]);
+    // Auto-fit camera after 120 ticks (~2s) so all nodes are visible
+    if (!fittedRef.current && tickCountRef.current > 120) {
+      fittedRef.current = true;
+
+      // Compute bounding sphere
+      let cx = 0, cy = 0, cz = 0;
+      for (const n of simNodes) { cx += n.pos.x; cy += n.pos.y; cz += n.pos.z; }
+      cx /= simNodes.length; cy /= simNodes.length; cz /= simNodes.length;
+
+      let maxR = 0;
+      for (const n of simNodes) {
+        const dx = n.pos.x - cx, dy = n.pos.y - cy, dz = n.pos.z - cz;
+        maxR = Math.max(maxR, Math.sqrt(dx * dx + dy * dy + dz * dz));
+      }
+
+      // Position camera to see full bounding sphere (fov=55°)
+      const fov = 55 * Math.PI / 180;
+      const dist = (maxR / Math.sin(fov / 2)) * 1.15; // 15% margin
+      const camDist = Math.min(Math.max(dist, 20), 100); // clamp between 20-100
+      camera.position.set(cx, cy + camDist * 0.5, cz + camDist);
+      camera.lookAt(cx, cy, cz);
+    }
+  });
 
   return (
     <>
@@ -713,6 +753,7 @@ export default function CosmicProjectGalaxy({ projectPath, fullscreen = false }:
           style={{ position: "absolute", inset: 0 }}
         >
           <GalaxyScene
+            key={simData.simNodes.length}
             simNodes={simData.simNodes}
             simLinks={simData.simLinks}
             selectedId={selectedId}
