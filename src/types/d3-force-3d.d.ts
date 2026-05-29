@@ -39,8 +39,6 @@ declare module 'd3-force-3d' {
     alphaDecay(decay: number): this;
     alphaTarget(): number;
     alphaTarget(target: number): this;
-    velocityDecay(): number;
-    velocityDecay(decay: number): this;
     on(typenames: string, listener: null): this;
     on(typenames: string, listener: (...args: any[]) => void): this;
   }
@@ -99,40 +97,4 @@ declare module 'd3-force-3d' {
     y?: number,
     z?: number,
   ): ForceCenter<NodeDatum>;
-
-  export interface ForceCollide<NodeDatum extends SimulationNodeDatum>
-    extends Force<NodeDatum, SimulationLinkDatum<NodeDatum>> {
-    radius(radius: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number)): this;
-    strength(strength: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number)): this;
-    iterations(): number;
-    iterations(iterations: number): this;
-  }
-
-  export function forceCollide<NodeDatum extends SimulationNodeDatum>(
-    radius?: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number),
-  ): ForceCollide<NodeDatum>;
-
-  export interface ForceX<NodeDatum extends SimulationNodeDatum>
-    extends Force<NodeDatum, SimulationLinkDatum<NodeDatum>> {
-    x(): number;
-    x(x: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number)): this;
-    strength(): number;
-    strength(strength: number): this;
-  }
-
-  export function forceX<NodeDatum extends SimulationNodeDatum>(
-    x: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number),
-  ): ForceX<NodeDatum>;
-
-  export interface ForceY<NodeDatum extends SimulationNodeDatum>
-    extends Force<NodeDatum, SimulationLinkDatum<NodeDatum>> {
-    y(): number;
-    y(y: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number)): this;
-    strength(): number;
-    strength(strength: number): this;
-  }
-
-  export function forceY<NodeDatum extends SimulationNodeDatum>(
-    y: number | ((d: NodeDatum, i: number, nodesData: NodeDatum[]) => number),
-  ): ForceY<NodeDatum>;
 }
