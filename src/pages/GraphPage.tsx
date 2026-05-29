@@ -1,20 +1,20 @@
 import { useContext } from "react";
-import CosmicProjectGalaxy from "@/components/graph/CosmicProjectGalaxy";
+import KnowledgeGraph from "@/components/graph/KnowledgeGraph";
 import { SidebarContext } from "@/components/layout/AppShell";
 
 interface GraphPageProps { selectedProjects: string[]; }
 
 export function GraphPage({ selectedProjects }: GraphPageProps) {
   const { collapsed } = useContext(SidebarContext);
-  
+
   // Safety: ensure at least one project is selected
   if (!selectedProjects || selectedProjects.length === 0) {
     return <div style={{ padding: 40, color: "#8070a0" }}>No projects selected. Go to Projects tab to select projects for the galaxy cluster.</div>;
   }
-  
+
   return (
     <ErrorBoundary fallback={<div style={{ padding: 40, color: "#ff6b6b" }}>Graph failed to load. Check console for errors.</div>}>
-      <CosmicProjectGalaxy projectPaths={selectedProjects} fullscreen={collapsed} />
+      <KnowledgeGraph projectPaths={selectedProjects} fullscreen={collapsed} />
     </ErrorBoundary>
   );
 }
