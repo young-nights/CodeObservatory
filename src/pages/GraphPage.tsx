@@ -1,5 +1,5 @@
 import { useContext } from "react";
-import KnowledgeGraph from "@/components/graph/KnowledgeGraph";
+import CosmicProjectGalaxy from "@/components/graph/CosmicProjectGalaxy";
 import { SidebarContext } from "@/components/layout/AppShell";
 
 interface GraphPageProps { selectedProjects: string[]; }
@@ -14,7 +14,7 @@ export function GraphPage({ selectedProjects }: GraphPageProps) {
 
   return (
     <ErrorBoundary fallback={<div style={{ padding: 40, color: "#ff6b6b" }}>Graph failed to load. Check console for errors.</div>}>
-      <KnowledgeGraph projectPaths={selectedProjects} fullscreen={collapsed} />
+      <CosmicProjectGalaxy projectPaths={selectedProjects} fullscreen={collapsed} />
     </ErrorBoundary>
   );
 }
