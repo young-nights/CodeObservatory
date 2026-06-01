@@ -3,6 +3,7 @@
 // Bezier arc edges + InstancedMesh + Points + Bloom
 // Full dark/light theme support via useTheme()
 // Hybrid: volumetric random init + d3-force-3d simulation (single layout, no toggle)
+// Multi-project: scans each project independently, merges with ring layout
 
 import { useRef, useCallback, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
@@ -10,11 +11,11 @@ import { OrbitControls, Stars } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import * as THREE from "three";
 import { forceSimulation, forceManyBody, forceLink, forceCenter } from "d3-force-3d";
-import { useScanGraph } from "@/hooks/useObservatory";
+import * as api from "@/lib/api";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
 import { SettingsPanel, type GalaxySettings, COLOR_PRESETS } from "./SettingsPanel";
-import type { FileNode, FileEdge } from "@/lib/types";
+import type { FileNode, FileEdge, GraphData } from "@/lib/types";
 import { FolderOpen, File, Hash, Clock } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════
@@ -143,8 +144,10 @@ function spiralPosition(
 
 // ══════════════════════════════════════════════════════════
 // GALAXY LAYOUT — spiral arm distribution + d3-force-3d
+// Supports multi-project ring layout via projectCenters
 // ══════════════════════════════════════════════════════════
 function computeGalaxyLayout(
+  projectPaths: string[],
   nodes: FileNode[],
   edges: FileEdge[],
   isDark: boolean,
@@ -165,213 +168,284 @@ function computeGalaxyLayout(
     edgeFile: preset.edgeFile,
   };
 
-  // ── 1. Find root & build graph structures ──
-  const targeted = new Set(edges.map((e) => e.target));
-  const root = nodes.find((n) => !targeted.has(n.id));
-  if (!root) return { nodes: [], edges: [] };
-
-  const children = new Map<string, string[]>();
-  for (const e of edges) {
-    const list = children.get(e.source) || [];
-    list.push(e.target);
-    children.set(e.source, list);
-  }
-
-  const depthMap = new Map<string, number>();
-  const nodesByDepth = new Map<number, FileNode[]>();
-  const parentMap = new Map<string, string>();
-  const queue: string[] = [root.id];
-  depthMap.set(root.id, 0);
-  nodesByDepth.set(0, [root]);
-
-  while (queue.length) {
-    const cur = queue.shift()!;
-    const curDepth = depthMap.get(cur)!;
-    for (const ch of children.get(cur) || []) {
-      if (!depthMap.has(ch)) {
-        depthMap.set(ch, curDepth + 1);
-        parentMap.set(ch, cur);
-        const list = nodesByDepth.get(curDepth + 1) || [];
-        list.push(nodes.find((n) => n.id === ch)!);
-        nodesByDepth.set(curDepth + 1, list);
-        queue.push(ch);
-      }
-    }
-  }
-
-  // ── 2. Build leaf & childrenCount maps ──
-  const sourceSetForLeaves = new Set(edges.map((e) => e.source));
-  const leafIds = new Set<string>();
-  for (const n of nodes) {
-    if (!sourceSetForLeaves.has(n.id) && n.id !== root.id && depthMap.has(n.id)) {
-      leafIds.add(n.id);
-    }
-  }
-  const childrenCountMap = new Map<string, number>();
-  function countLeaves(nodeId: string): number {
-    if (childrenCountMap.has(nodeId)) return childrenCountMap.get(nodeId)!;
-    const ch = children.get(nodeId) || [];
-    let total = 0;
-    for (const cid of ch) {
-      if (leafIds.has(cid)) {
-        total += 1;
-      } else {
-        total += countLeaves(cid);
-      }
-    }
-    childrenCountMap.set(nodeId, total);
-    return total;
-  }
-  countLeaves(root.id);
-  for (const nodeId of children.keys()) countLeaves(nodeId);
-
-  // Sanitize settings — use defaults if fields are missing (backward compat)
   const armCount = settings.armCount ?? 5;
   const galaxyScale = settings.galaxyScale ?? 1.0;
   const armCurvature = settings.armCurvature ?? 0.6;
 
-  // ── 3. Spiral-arm initial placement ──
-  const sphericalNodes = new Map<string, SphericalNode>();
-  const resultNodes: SphericalNode[] = [];
-  const nodeArm = new Map<string, number>(); // node id → arm index
-
-  // Root fixed at origin
-  const rootSN: SphericalNode = {
-    id: root.id, name: root.label, path: root.path,
-    type: "root", color: clr.root,
-    x: 0, y: 0, z: 0, depth: 0,
-  };
-  sphericalNodes.set(root.id, rootSN);
-  resultNodes.push(rootSN);
-
-  // ── 3a. Depth-1 folders: distributed along spiral arms, t = 0.1~0.4 ──
-  const depth1 = nodesByDepth.get(1) || [];
-  for (let i = 0; i < depth1.length; i++) {
-    const node = depth1[i];
-    if (!node) continue;
-    const arm = i % armCount;
-    const t = 0.1 + Math.random() * 0.3;
-    const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
-    const sn: SphericalNode = {
-      id: node.id, name: node.label, path: node.path,
-      type: "planet",
-      color: Math.random() < 0.5 ? clr.dir1 : clr.dir2,
-      x, y, z, depth: 1,
-    };
-    sphericalNodes.set(node.id, sn);
-    nodeArm.set(node.id, arm);
-    resultNodes.push(sn);
+  // ── Compute ring centers for multi-project layout ──
+  const projectCenters: [number, number, number][] = [];
+  if (projectPaths.length === 1) {
+    projectCenters.push([0, 0, 0]);
+  } else {
+    const ringR = 80 * Math.sqrt(projectPaths.length);
+    for (let i = 0; i < projectPaths.length; i++) {
+      const ang = (2 * Math.PI * i) / projectPaths.length;
+      projectCenters.push([ringR * Math.cos(ang), 0, ringR * Math.sin(ang)]);
+    }
   }
 
-  // ── 3b. Depth-2+ folders: follow same arm as parent, t = 0.4~0.8 ──
-  for (let d = 2; d <= 10; d++) {
-    const layer = nodesByDepth.get(d);
-    if (!layer || layer.length === 0) break;
-    for (const node of layer) {
-      if (!node) continue;
-      const pId = parentMap.get(node.id);
-      let arm: number;
-      if (pId && nodeArm.has(pId)) {
-        arm = nodeArm.get(pId)!;
-      } else {
-        arm = Math.floor(Math.random() * armCount);
+  // ── Per-project layout computation ──
+  const allResultNodes: SphericalNode[] = [];
+  const allResultEdges: SphericalEdge[] = [];
+  const sphericalNodes = new Map<string, SphericalNode>();
+
+  for (let pi = 0; pi < projectPaths.length; pi++) {
+    const pp = projectPaths[pi];
+    const cx = projectCenters[pi][0];
+    const cy = projectCenters[pi][1];
+    const cz = projectCenters[pi][2];
+
+    // Filter nodes/edges belonging to this project
+    const projNodes = nodes.filter((n) => n.id.startsWith(pp + "::") || n.path.startsWith(pp));
+    const projEdges = edges.filter((e) => {
+      const src = nodes.find((nn) => nn.id === e.source);
+      const tgt = nodes.find((nn) => nn.id === e.target);
+      return (src && (src.id.startsWith(pp + "::") || src.path.startsWith(pp))) ||
+             (tgt && (tgt.id.startsWith(pp + "::") || tgt.path.startsWith(pp)));
+    });
+
+    if (projNodes.length === 0) continue;
+
+    // ── Find root & build graph structures ──
+    const targeted = new Set(projEdges.map((e) => e.target));
+    const root = projNodes.find((n) => !targeted.has(n.id));
+    if (!root) continue;
+
+    const children = new Map<string, string[]>();
+    for (const e of projEdges) {
+      const list = children.get(e.source) || [];
+      list.push(e.target);
+      children.set(e.source, list);
+    }
+
+    const depthMap = new Map<string, number>();
+    const nodesByDepth = new Map<number, FileNode[]>();
+    const parentMap = new Map<string, string>();
+    const queue: string[] = [root.id];
+    depthMap.set(root.id, 0);
+    nodesByDepth.set(0, [root]);
+
+    while (queue.length) {
+      const cur = queue.shift()!;
+      const curDepth = depthMap.get(cur)!;
+      for (const ch of children.get(cur) || []) {
+        if (!depthMap.has(ch)) {
+          depthMap.set(ch, curDepth + 1);
+          parentMap.set(ch, cur);
+          const list = nodesByDepth.get(curDepth + 1) || [];
+          list.push(projNodes.find((n) => n.id === ch)!);
+          nodesByDepth.set(curDepth + 1, list);
+          queue.push(ch);
+        }
       }
-      const t = 0.4 + Math.random() * 0.4;
-      const [x, y, z] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
+    }
+
+    // ── Build leaf & childrenCount maps ──
+    const sourceSetForLeaves = new Set(projEdges.map((e) => e.source));
+    const leafIds = new Set<string>();
+    for (const n of projNodes) {
+      if (!sourceSetForLeaves.has(n.id) && n.id !== root.id && depthMap.has(n.id)) {
+        leafIds.add(n.id);
+      }
+    }
+    const childrenCountMap = new Map<string, number>();
+    function countLeaves(nodeId: string): number {
+      if (childrenCountMap.has(nodeId)) return childrenCountMap.get(nodeId)!;
+      const ch = children.get(nodeId) || [];
+      let total = 0;
+      for (const cid of ch) {
+        if (leafIds.has(cid)) {
+          total += 1;
+        } else {
+          total += countLeaves(cid);
+        }
+      }
+      childrenCountMap.set(nodeId, total);
+      return total;
+    }
+    countLeaves(root.id);
+    for (const nodeId of children.keys()) countLeaves(nodeId);
+
+    // ── Spiral-arm initial placement ──
+    const projSphericalNodes = new Map<string, SphericalNode>();
+    const resultNodes: SphericalNode[] = [];
+    const nodeArm = new Map<string, number>();
+
+    // Root fixed at project center
+    const rootSN: SphericalNode = {
+      id: root.id, name: root.label, path: root.path,
+      type: "root", color: clr.root,
+      x: cx, y: cy, z: cz, depth: 0,
+    };
+    projSphericalNodes.set(root.id, rootSN);
+    sphericalNodes.set(root.id, rootSN);
+    resultNodes.push(rootSN);
+
+    // ── Depth-1 folders ──
+    const depth1 = nodesByDepth.get(1) || [];
+    for (let i = 0; i < depth1.length; i++) {
+      const node = depth1[i];
+      if (!node) continue;
+      const arm = i % armCount;
+      const t = 0.1 + Math.random() * 0.3;
+      const [lx, ly, lz] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
       const sn: SphericalNode = {
         id: node.id, name: node.label, path: node.path,
-        type: "planet", color: clr.dir2,
-        x, y, z, depth: d,
+        type: "planet",
+        color: Math.random() < 0.5 ? clr.dir1 : clr.dir2,
+        x: cx + lx, y: cy + ly, z: cz + lz, depth: 1,
       };
+      projSphericalNodes.set(node.id, sn);
       sphericalNodes.set(node.id, sn);
       nodeArm.set(node.id, arm);
       resultNodes.push(sn);
     }
-  }
 
-  // ── 3c. File (star) nodes: clustered near parent with outward push ──
-  const sourceSet = new Set(edges.map((e) => e.source));
-  const leafNodes = nodes.filter(
-    (n) => !sourceSet.has(n.id) && n.id !== root.id && depthMap.has(n.id),
-  );
+    // ── Depth-2+ folders ──
+    for (let d = 2; d <= 10; d++) {
+      const layer = nodesByDepth.get(d);
+      if (!layer || layer.length === 0) break;
+      for (const node of layer) {
+        if (!node) continue;
+        const pId = parentMap.get(node.id);
+        let arm: number;
+        if (pId && nodeArm.has(pId)) {
+          arm = nodeArm.get(pId)!;
+        } else {
+          arm = Math.floor(Math.random() * armCount);
+        }
+        const t = 0.4 + Math.random() * 0.4;
+        const [lx, ly, lz] = spiralPosition(arm, t, armCount, galaxyScale, armCurvature);
+        const sn: SphericalNode = {
+          id: node.id, name: node.label, path: node.path,
+          type: "planet", color: clr.dir2,
+          x: cx + lx, y: cy + ly, z: cz + lz, depth: d,
+        };
+        projSphericalNodes.set(node.id, sn);
+        sphericalNodes.set(node.id, sn);
+        nodeArm.set(node.id, arm);
+        resultNodes.push(sn);
+      }
+    }
 
-  const filesByParent = new Map<string, FileNode[]>();
-  for (const fn of leafNodes) {
-    const p = parentMap.get(fn.id);
-    if (p) {
-      const list = filesByParent.get(p) || [];
-      list.push(fn);
-      filesByParent.set(p, list);
+    // ── File (star) nodes ──
+    const sourceSet = new Set(projEdges.map((e) => e.source));
+    const leafNodes = projNodes.filter(
+      (n) => !sourceSet.has(n.id) && n.id !== root.id && depthMap.has(n.id),
+    );
+
+    const filesByParent = new Map<string, FileNode[]>();
+    for (const fn of leafNodes) {
+      const p = parentMap.get(fn.id);
+      if (p) {
+        const list = filesByParent.get(p) || [];
+        list.push(fn);
+        filesByParent.set(p, list);
+      }
+    }
+
+    for (const [parentId, childNodes] of filesByParent) {
+      const parentSN = projSphericalNodes.get(parentId);
+      if (!parentSN) continue;
+      const parentArm = nodeArm.get(parentId) ?? 0;
+      const armAngle = (2 * Math.PI * parentArm) / armCount;
+
+      childNodes.forEach((node) => {
+        const localR = 3 + Math.random() * 7;
+        const [ox, oy, oz] = randomOnSphere(localR);
+        const pushOut = 2 + Math.random() * 3;
+        const nx = Math.cos(armAngle);
+        const nz = Math.sin(armAngle);
+        const ext = (node.extension || "").toLowerCase();
+        const starDepth = depthMap.get(node.id) ?? 2;
+        const sn: SphericalNode = {
+          id: node.id, name: node.label, path: node.path,
+          type: "star",
+          color: clr.file[ext] || clr.defaultFile,
+          x: parentSN.x + ox + nx * pushOut,
+          y: parentSN.y + oy + (Math.random() - 0.5) * 16,
+          z: parentSN.z + oz + nz * pushOut,
+          extension: node.extension, size: node.size,
+          depth: starDepth,
+        };
+        projSphericalNodes.set(node.id, sn);
+        sphericalNodes.set(node.id, sn);
+        nodeArm.set(node.id, parentArm);
+        resultNodes.push(sn);
+      });
+    }
+
+    // ── Dust nodes ──
+    const alreadyPlaced = new Set(projSphericalNodes.keys());
+    const remaining = projNodes.filter((n) => !alreadyPlaced.has(n.id));
+    for (const node of remaining) {
+      const r = 15 + Math.random() * 25;
+      const angle = Math.random() * 2 * Math.PI;
+      const d = depthMap.get(node.id) ?? 99;
+      const sn: SphericalNode = {
+        id: node.id, name: node.label, path: node.path,
+        type: "dust", color: clr.dust,
+        x: cx + r * Math.cos(angle),
+        y: cy + (Math.random() - 0.5) * 30,
+        z: cz + r * Math.sin(angle),
+        depth: d,
+      };
+      projSphericalNodes.set(node.id, sn);
+      sphericalNodes.set(node.id, sn);
+      resultNodes.push(sn);
+    }
+
+    // ── Build edges for this project ──
+    for (const e of projEdges) {
+      const from = projSphericalNodes.get(e.source);
+      const to = projSphericalNodes.get(e.target);
+      if (!from || !to) continue;
+      const color = from.depth === 0 ? clr.edgeRoot
+        : from.depth === 1 ? clr.edgeDir
+        : clr.edgeFile;
+      const cc = childrenCountMap.get(e.source) ?? 0;
+      allResultEdges.push({ from, to, color, childrenCount: cc });
+    }
+
+    // Root-to-file edges
+    for (const sn of resultNodes) {
+      if (sn.type === "star") {
+        allResultEdges.push({ from: rootSN, to: sn, color: "#c8d0ff", childrenCount: 0 });
+      }
+    }
+
+    // Sibling connections
+    for (const [, childNodes] of filesByParent) {
+      if (childNodes.length < 3) continue;
+      for (const node of childNodes) {
+        const others = childNodes.filter(c => c.id !== node.id);
+        const numLinks = Math.min((childNodes.length / 3) | 0, 3);
+        for (let i = 0; i < numLinks; i++) {
+          const target = others[Math.floor(Math.random() * others.length)];
+          if (!target) continue;
+          const fromSN = projSphericalNodes.get(node.id);
+          const toSN = projSphericalNodes.get(target.id);
+          if (fromSN && toSN) {
+            allResultEdges.push({ from: fromSN, to: toSN, color: "#8888aa", childrenCount: 0 });
+          }
+        }
+      }
     }
   }
 
-  for (const [parentId, childNodes] of filesByParent) {
-    const parentSN = sphericalNodes.get(parentId);
-    if (!parentSN) continue;
-    const parentArm = nodeArm.get(parentId) ?? 0;
-    const armAngle = (2 * Math.PI * parentArm) / armCount;
-
-    childNodes.forEach((node) => {
-      // Local cluster offset around parent (radius 3–10)
-      const localR = 3 + Math.random() * 7;
-      const [ox, oy, oz] = randomOnSphere(localR);
-      // Small outward push along arm direction
-      const pushOut = 2 + Math.random() * 3;
-      const nx = Math.cos(armAngle);
-      const nz = Math.sin(armAngle);
-      const ext = (node.extension || "").toLowerCase();
-      const starDepth = depthMap.get(node.id) ?? 2;
-      const sn: SphericalNode = {
-        id: node.id, name: node.label, path: node.path,
-        type: "star",
-        color: clr.file[ext] || clr.defaultFile,
-        x: parentSN.x + ox + nx * pushOut,
-        y: parentSN.y + oy + (Math.random() - 0.5) * 16,
-        z: parentSN.z + oz + nz * pushOut,
-        extension: node.extension, size: node.size,
-        depth: starDepth,
-      };
-      sphericalNodes.set(node.id, sn);
-      nodeArm.set(node.id, parentArm);
-      resultNodes.push(sn);
-    });
-  }
-
-  // ── 3d. Dust nodes: inter-arm space, radius 15–40 + height jitter ──
-  const alreadyPlaced = new Set(sphericalNodes.keys());
-  const remaining = nodes.filter((n) => !alreadyPlaced.has(n.id));
-  for (const node of remaining) {
-    const r = 15 + Math.random() * 25;
-    const angle = Math.random() * 2 * Math.PI;
-    const d = depthMap.get(node.id) ?? 99;
-    const sn: SphericalNode = {
-      id: node.id, name: node.label, path: node.path,
-      type: "dust", color: clr.dust,
-      x: r * Math.cos(angle),
-      y: (Math.random() - 0.5) * 30,
-      z: r * Math.sin(angle),
-      depth: d,
-    };
-    sphericalNodes.set(node.id, sn);
-    resultNodes.push(sn);
-  }
-
-  // ── 4. Run d3-force-3d simulation on top of initial positions ──
-  if (resultNodes.length > 1) {
-    // Build force-simulation nodes (root fixed at origin)
-    const forceNodes = resultNodes.map((n) => ({
+  // ── Run d3-force-3d simulation on merged graph ──
+  if (allResultNodes.length > 1) {
+    const forceNodes = allResultNodes.map((n) => ({
       id: n.id,
       x: n.x, y: n.y, z: n.z,
       type: n.type,
-      fx: n.type === "root" ? 0 : (undefined as number | undefined),
-      fy: n.type === "root" ? 0 : (undefined as number | undefined),
-      fz: n.type === "root" ? 0 : (undefined as number | undefined),
+      fx: n.type === "root" ? n.x : (undefined as number | undefined),
+      fy: n.type === "root" ? n.y : (undefined as number | undefined),
+      fz: n.type === "root" ? n.z : (undefined as number | undefined),
     }));
 
-    // Build link references by node id → array index
-    const idToIdx = new Map(resultNodes.map((n, i) => [n.id, i]));
+    const idToIdx = new Map(allResultNodes.map((n, i) => [n.id, i]));
 
-    // Only link parent-child edges (not the extra root-to-file edges)
     const forceLinks: { source: number; target: number }[] = [];
     for (const e of edges) {
       const si = idToIdx.get(e.source);
@@ -381,15 +455,14 @@ function computeGalaxyLayout(
       }
     }
 
-    // Per-type charge: folders repel more than files to reduce crowding
     const sim = forceSimulation(forceNodes, 3)
       .force(
         "charge",
         forceManyBody().strength((d) => {
           const t = (d as { type?: string }).type;
-          if (t === "planet") return -100;   // folders
-          if (t === "star") return -60;       // files cluster tighter
-          return -80;                          // dust & others
+          if (t === "planet") return -100;
+          if (t === "star") return -60;
+          return -80;
         }),
       )
       .force(
@@ -402,17 +475,16 @@ function computeGalaxyLayout(
       )
       .stop();
 
-    // Run 500 ticks for convergence
     for (let i = 0; i < 500; i++) sim.tick();
 
     // Copy positions back
-    resultNodes.forEach((n, i) => {
+    allResultNodes.forEach((n, i) => {
       n.x = forceNodes[i].x;
       n.y = forceNodes[i].y;
       n.z = forceNodes[i].z;
     });
 
-    // Compute degree for each node (in + out edges from force links)
+    // Compute degree
     const degreeMap = new Map<string, number>();
     for (const link of forceLinks) {
       const srcNode = forceNodes[link.source];
@@ -421,51 +493,12 @@ function computeGalaxyLayout(
       degreeMap.set(srcNode.id, (degreeMap.get(srcNode.id) || 0) + 1);
       degreeMap.set(tgtNode.id, (degreeMap.get(tgtNode.id) || 0) + 1);
     }
-    for (const n of resultNodes) {
+    for (const n of allResultNodes) {
       n.degree = degreeMap.get(n.id) || 0;
     }
   }
 
-  // ── 5. Build edges (same logic as before) ──
-  const resultEdges: SphericalEdge[] = [];
-  for (const e of edges) {
-    const from = sphericalNodes.get(e.source);
-    const to = sphericalNodes.get(e.target);
-    if (!from || !to) continue;
-    const color = from.depth === 0 ? clr.edgeRoot
-      : from.depth === 1 ? clr.edgeDir
-      : clr.edgeFile;
-    const cc = childrenCountMap.get(e.source) ?? 0;
-    resultEdges.push({ from, to, color, childrenCount: cc });
-  }
-
-  // Root-to-file edges: radiating filaments from center
-  const rootSN_forEdge = sphericalNodes.get(root.id)!;
-  for (const sn of resultNodes) {
-    if (sn.type === "star") {
-      resultEdges.push({ from: rootSN_forEdge, to: sn, color: "#c8d0ff", childrenCount: 0 });
-    }
-  }
-
-  // Sibling connections: create local mesh within each folder
-  for (const [, childNodes] of filesByParent) {
-    if (childNodes.length < 3) continue;
-    for (const node of childNodes) {
-      const others = childNodes.filter(c => c.id !== node.id);
-      const numLinks = Math.min((childNodes.length / 3) | 0, 3);
-      for (let i = 0; i < numLinks; i++) {
-        const target = others[Math.floor(Math.random() * others.length)];
-        if (!target) continue;
-        const fromSN = sphericalNodes.get(node.id);
-        const toSN = sphericalNodes.get(target.id);
-        if (fromSN && toSN) {
-          resultEdges.push({ from: fromSN, to: toSN, color: "#8888aa", childrenCount: 0 });
-        }
-      }
-    }
-  }
-
-  return { nodes: resultNodes, edges: resultEdges };
+  return { nodes: allResultNodes, edges: allResultEdges };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -916,12 +949,11 @@ const DEFS: GalaxySettings = {
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════
 interface Props {
-  projectPath: string;
+  projectPaths: string[];
   fullscreen?: boolean;
 }
 
-export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props) {
-  const { graph, loading, refresh } = useScanGraph(projectPath);
+export default function ProjectGalaxy({ projectPaths, fullscreen = false }: Props) {
   const { theme } = useTheme();
   const { t } = useTranslation();
   const isDark = theme === "dark";
@@ -944,6 +976,40 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
   };
   const [dim, setDim] = useState({ w: window.innerWidth, h: window.innerHeight });
 
+  // ── Multi-project data fetching ──
+  const [mergedGraph, setMergedGraph] = useState<{ nodes: FileNode[]; edges: FileEdge[] } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!projectPaths?.length) { setMergedGraph(null); return; }
+    let dead = false;
+    (async () => {
+      setLoading(true);
+      const allNodes: FileNode[] = [];
+      const allEdges: FileEdge[] = [];
+      const seen = new Set<string>();
+      for (const pp of projectPaths) {
+        try {
+          const d: GraphData = await api.scanDirectory(pp);
+          for (const n of d.nodes) {
+            const id = `${pp}::${n.id}`;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            allNodes.push({ ...n, id });
+          }
+          for (const e of d.edges) {
+            allEdges.push({ ...e, source: `${pp}::${e.source}`, target: `${pp}::${e.target}` });
+          }
+        } catch (e) { console.error(`Failed to scan ${pp}:`, e); }
+      }
+      if (!dead) {
+        setMergedGraph({ nodes: allNodes, edges: allEdges });
+        setLoading(false);
+      }
+    })();
+    return () => { dead = true; };
+  }, [projectPaths]);
+
   // Loading timeout
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   useEffect(() => {
@@ -961,11 +1027,11 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
     return () => window.removeEventListener("resize", onR);
   }, []);
 
-  // Compute single hybrid layout (volumetric random init + d3-force, no toggle)
+  // Compute layout with multi-project support
   const layout = useMemo(() => {
-    if (!graph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
-    return computeGalaxyLayout(graph.nodes, graph.edges, isDark, settings);
-  }, [graph, isDark]);
+    if (!mergedGraph) return { nodes: [] as SphericalNode[], edges: [] as SphericalEdge[] };
+    return computeGalaxyLayout(projectPaths, mergedGraph.nodes, mergedGraph.edges, isDark, settings);
+  }, [mergedGraph, projectPaths, isDark]);
 
   // Selected node data
   const selectedNode = useMemo(
@@ -1028,7 +1094,9 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
             <>
               <p style={{ fontWeight: 600 }}>{t("app.noData")}</p>
               <p style={{ fontSize: 12, opacity: 0.6 }}>
-                Project: {projectPath}
+                {projectPaths.length === 1
+                  ? `Project: ${projectPaths[0]}`
+                  : `${projectPaths.length} projects selected`}
               </p>
             </>
           )}
@@ -1072,7 +1140,34 @@ export default function ProjectGalaxy({ projectPath, fullscreen = false }: Props
 
       {/* ── Refresh button ── */}
       <button
-        onClick={refresh}
+        onClick={() => {
+          setLoading(true);
+          setMergedGraph(null);
+          // Trigger re-fetch by resetting state
+          const paths = [...projectPaths];
+          setMergedGraph(null);
+          (async () => {
+            const allNodes: FileNode[] = [];
+            const allEdges: FileEdge[] = [];
+            const seen = new Set<string>();
+            for (const pp of paths) {
+              try {
+                const d: GraphData = await api.scanDirectory(pp);
+                for (const n of d.nodes) {
+                  const id = `${pp}::${n.id}`;
+                  if (seen.has(id)) continue;
+                  seen.add(id);
+                  allNodes.push({ ...n, id });
+                }
+                for (const e of d.edges) {
+                  allEdges.push({ ...e, source: `${pp}::${e.source}`, target: `${pp}::${e.target}` });
+                }
+              } catch (e) { console.error(`Failed to scan ${pp}:`, e); }
+            }
+            setMergedGraph({ nodes: allNodes, edges: allEdges });
+            setLoading(false);
+          })();
+        }}
         className="absolute bottom-6 right-6 z-20 w-8 h-8 rounded-lg flex items-center justify-center"
         style={{
           background: clr.ui.card,
