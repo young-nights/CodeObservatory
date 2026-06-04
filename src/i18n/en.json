@@ -21,7 +21,8 @@
     "watching": "Watching",
     "idle": "Idle",
     "toggleTheme": "Toggle theme",
-    "toggleLang": "Switch language"
+    "toggleLang": "Switch language",
+    "backToProjects": "Back to projects"
   },
   "settings": {
     "title": "Galaxy",
@@ -58,6 +59,21 @@
     "openProject": "Open Project Directory",
     "recentProjects": "Recent Projects",
     "selectFirst": "Select your first project to begin tracking code changes",
-    "initializing": "Initializing…"
+    "initializing": "Initializing…",
+    "projects": "Projects",
+    "settings": "Settings",
+    "settingsComingSoon": "Settings coming soon",
+    "justNow": "Just now",
+    "mAgo": "m ago",
+    "hAgo": "h ago",
+    "dAgo": "d ago"
+  },
+  "dashboard": {
+    "totalChanges": "Total Changes",
+    "filesTracked": "Files Tracked",
+    "watcher": "Watcher",
+    "active": "Active",
+    "idle": "Idle",
+    "recentChanges": "Recent Changes"
   }
 }

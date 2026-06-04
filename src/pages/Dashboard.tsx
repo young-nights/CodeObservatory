@@ -9,6 +9,7 @@ import {
   GitCommit,
   Clock,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface DashboardPageProps {
   projectPath: string;
@@ -17,6 +18,7 @@ interface DashboardPageProps {
 export function DashboardPage({ projectPath }: DashboardPageProps) {
   const { changes, loading } = useChanges(projectPath);
   const status = useWatcher();
+  const { t } = useTranslation();
   const recentChanges = changes.slice(0, 15);
   const stats = computeStats(changes);
 
@@ -27,7 +29,7 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
         className="co-section-header co-animate-fade-in"
         style={{ padding: "0 0 var(--co-space-4) 0" }}
       >
-        <h2 className="co-section-title">Dashboard</h2>
+        <h2 className="co-section-title">{t("nav.dashboard")}</h2>
       </div>
 
       {/* Stats — 3-column grid, serif numbers */}
@@ -35,20 +37,20 @@ export function DashboardPage({ projectPath }: DashboardPageProps) {
         <div className="co-stat-grid co-stagger">
           <StatCard
             icon={<GitCommit size={16} />}
-            label="Total Changes"
+            label={t("dashboard.totalChanges")}
             value={stats.total}
             variant="default"
           />
           <StatCard
             icon={<FileText size={16} />}
-            label="Files Tracked"
+            label={t("dashboard.filesTracked")}
             value={stats.uniqueFiles}
             variant="success"
           />
           <StatCard
             icon={<Clock size={16} />}
-            label="Watcher"
-            value={status?.running ? "Active" : "Idle"}
+            label={t("dashboard.watcher")}
+            value={status?.running ? t("dashboard.active") : t("dashboard.idle")}
             variant={status?.running ? "success" : "default"}
             valueStyle={{
               fontSize: "14px",

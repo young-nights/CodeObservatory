@@ -55,7 +55,7 @@ export function TopBar({ projectName, watcherRunning, collapsed, onExpand, onClo
             {onCloseProject && (
               <button
                 onClick={onCloseProject}
-                title="Back to projects"
+                title={t("topbar.backToProjects")}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "center",
                   width: 24, height: 24, borderRadius: 4,

@@ -16,13 +16,13 @@ interface Props {
 
 type NavItem = "projects" | "settings";
 
-function fmtTime(iso: string): string {
+function fmtTime(iso: string, t: (key: string) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000);
-  if (m < 1) return "Just now";
-  if (m < 60) return `${m}m ago`;
-  if (h < 24) return `${h}h ago`;
-  if (d < 7) return `${d}d ago`;
+  if (m < 1) return t("project.justNow");
+  if (m < 60) return `${m}${t("project.mAgo")}`;
+  if (h < 24) return `${h}${t("project.hAgo")}`;
+  if (d < 7) return `${d}${t("project.dAgo")}`;
   return new Date(iso).toLocaleDateString();
 }
 
@@ -65,7 +65,7 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "6px 6px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {([{ id: "projects", icon: FolderOpen, label: "Projects" }, { id: "settings", icon: Settings, label: "Settings" }] as const).map(item => {
+          {([{ id: "projects", icon: FolderOpen, label: t("project.projects") }, { id: "settings", icon: Settings, label: t("project.settings") }] as const).map(item => {
             const Icon = item.icon;
             const active = nav === item.id;
             return (
@@ -100,7 +100,7 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "28px 32px 16px" }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: c.text, fontFamily: "system-ui, sans-serif", letterSpacing: "-0.02em" }}>
-            {nav === "projects" ? "Projects" : "Settings"}
+            {nav === "projects" ? t("project.projects") : t("project.settings")}
           </h1>
           {nav === "projects" && (
             <button onClick={() => onOpenProject()} disabled={isInitializing}
@@ -146,7 +146,7 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
                       <div style={{ fontSize: 12, color: c.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{proj.path}</div>
                     </div>
 
-                    <span style={{ fontSize: 12, color: isDark ? "#71717a" : "#9ca3af", flexShrink: 0, fontVariantNumeric: "tabular-nums" as const }}>{fmtTime(proj.lastOpened)}</span>
+                    <span style={{ fontSize: 12, color: isDark ? "#71717a" : "#9ca3af", flexShrink: 0, fontVariantNumeric: "tabular-nums" as const }}>{fmtTime(proj.lastOpened, t)}</span>
                     <ChevronRight size={14} color={hovered === i ? c.accent : (isDark ? "#52525b" : "#d1d5db")} style={{ flexShrink: 0, transition: "all 0.12s ease", transform: hovered === i ? "translateX(2px)" : "none" }} />
                   </div>
                 ))}
@@ -163,7 +163,7 @@ export function ProjectSelector({ recentProjects, isInitializing, onOpenProject,
           {nav === "settings" && (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12 }}>
               <Settings size={44} color={isDark ? "#52525b" : "#d1d5db"} strokeWidth={1} />
-              <p style={{ fontSize: 14, color: c.textMuted }}>Settings coming soon</p>
+              <p style={{ fontSize: 14, color: c.textMuted }}>{t("project.settingsComingSoon")}</p>
             </div>
           )}
         </div>

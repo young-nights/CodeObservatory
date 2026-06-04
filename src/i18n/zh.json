@@ -21,7 +21,8 @@
     "watching": "监听中",
     "idle": "空闲",
     "toggleTheme": "切换主题",
-    "toggleLang": "切换语言"
+    "toggleLang": "切换语言",
+    "backToProjects": "返回项目列表"
   },
   "settings": {
     "title": "图谱设置",
@@ -58,6 +59,21 @@
     "openProject": "打开项目目录",
     "recentProjects": "最近项目",
     "selectFirst": "选择你的第一个项目开始追踪代码变更",
-    "initializing": "初始化中…"
+    "initializing": "初始化中…",
+    "projects": "项目",
+    "settings": "设置",
+    "settingsComingSoon": "设置功能即将推出",
+    "justNow": "刚刚",
+    "mAgo": "分钟前",
+    "hAgo": "小时前",
+    "dAgo": "天前"
+  },
+  "dashboard": {
+    "totalChanges": "总变更",
+    "filesTracked": "已追踪文件",
+    "watcher": "监听器",
+    "active": "运行中",
+    "idle": "空闲",
+    "recentChanges": "最近变更"
   }
 }
