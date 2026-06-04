@@ -1,7 +1,7 @@
 // App — Main entry point
 // Single ThemeProvider wrapping entire app
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProjectSelector } from "@/components/project/ProjectSelector";
@@ -49,6 +49,18 @@ function AppContent() {
     setSelectedProjects(paths);
     saveSelectedProjects(paths);
   }, []);
+
+  // Auto-add opened project to selectedProjects for galaxy cluster
+  useEffect(() => {
+    if (project) {
+      setSelectedProjects((prev) => {
+        if (prev.includes(project.path)) return prev;
+        const next = [...prev, project.path];
+        saveSelectedProjects(next);
+        return next;
+      });
+    }
+  }, [project]);
 
   if (!project) {
     return (
