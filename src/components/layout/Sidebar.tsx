@@ -1,13 +1,12 @@
 // Sidebar — 100% inline styles, dual theme, CSS transition width animation
 
-import { Telescope, LayoutDashboard, GitBranch, Share2, PanelRight } from "lucide-react";
+import { Telescope, LayoutDashboard, GitBranch, PanelRight } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
 
 const NAV = [
   { id: "dashboard", label: "nav.dashboard", icon: LayoutDashboard },
   { id: "timeline", label: "nav.timeline", icon: GitBranch },
-  { id: "graph", label: "nav.graph", icon: Share2 },
 ] as const;
 
 interface SidebarProps {
