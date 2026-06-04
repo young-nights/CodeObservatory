@@ -28,7 +28,7 @@ function saveSelectedProjects(projects: string[]) {
 }
 
 function AppContent() {
-  const { project, recentProjects, isInitializing, openProject } = useProject();
+  const { project, recentProjects, isInitializing, openProject, closeProject } = useProject();
   const [activeTab, setActiveTab] = useState<ViewTab>("dashboard");
   const status = useWatcher();
 
@@ -70,6 +70,7 @@ function AppContent() {
       onTabChange={(tab) => setActiveTab(tab as ViewTab)}
       projectName={project.name}
       watcherRunning={status?.running}
+      onCloseProject={closeProject}
     >
       {activeTab === "dashboard" && <DashboardPage projectPath={project.path} />}
       {activeTab === "timeline" && <TimelinePage projectPath={project.path} />}

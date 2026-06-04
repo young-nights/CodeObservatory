@@ -1,7 +1,7 @@
 // TopBar — Theme-aware, always visible, all inline styles
 // Language toggle + Theme toggle + project path breadcrumb + watcher status
 
-import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon } from "lucide-react";
+import { PanelLeft, ChevronRight, FolderOpen, Sun, Moon, ArrowLeft } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useTranslation } from "react-i18next";
 
@@ -10,9 +10,10 @@ interface TopBarProps {
   watcherRunning?: boolean;
   collapsed: boolean;
   onExpand: () => void;
+  onCloseProject?: () => void;
 }
 
-export function TopBar({ projectName, watcherRunning, collapsed, onExpand }: TopBarProps) {
+export function TopBar({ projectName, watcherRunning, collapsed, onExpand, onCloseProject }: TopBarProps) {
   const { theme, toggle } = useTheme();
   const { t, i18n } = useTranslation();
   const isDark = theme === "dark";
@@ -51,6 +52,23 @@ export function TopBar({ projectName, watcherRunning, collapsed, onExpand }: Top
 
         {projectName ? (
           <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            {onCloseProject && (
+              <button
+                onClick={onCloseProject}
+                title="Back to projects"
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: 24, height: 24, borderRadius: 4,
+                  color: isDark ? "#a1a1aa" : "#71717a",
+                  background: "transparent", border: "none", cursor: "pointer",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = isDark ? "#fafafa" : "#18181b"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = isDark ? "#a1a1aa" : "#71717a"; }}
+              >
+                <ArrowLeft size={14} />
+              </button>
+            )}
             <FolderOpen size={13} color={isDark ? "#a1a1aa" : "#71717a"} />
             <ChevronRight size={10} color={isDark ? "#52525b" : "#d4d4d8"} />
             <span

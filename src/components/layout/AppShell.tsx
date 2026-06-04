@@ -15,10 +15,11 @@ interface AppShellProps {
   onTabChange: (tab: string) => void;
   projectName?: string;
   watcherRunning?: boolean;
+  onCloseProject?: () => void;
   children: ReactNode;
 }
 
-export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, children }: AppShellProps) {
+export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, onCloseProject, children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(KEY) === "1"; } catch { return false; }
   });
@@ -34,7 +35,7 @@ export function AppShell({ activeTab, onTabChange, projectName, watcherRunning, 
       <div style={{ display: "flex", height: "100vh", overflow: "hidden", background: isDark ? "#08080c" : "#f5f5f7" }}>
         <Sidebar activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} onToggle={handleToggle} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <TopBar projectName={projectName} watcherRunning={watcherRunning} collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+          <TopBar projectName={projectName} watcherRunning={watcherRunning} collapsed={collapsed} onExpand={() => setCollapsed(false)} onCloseProject={onCloseProject} />
           <main style={{ flex: 1, overflow: "hidden", background: isDark ? "#05050f" : "#f0f0f5", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0 }}>
               {children}
