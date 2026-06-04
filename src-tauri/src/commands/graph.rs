@@ -115,6 +115,24 @@ const TRACKED_EXTENSIONS: &[&str] = &[
     "sh", "bash", "zsh", "fish",
     "nix", "dhall",
     "dockerfile", "dockerignore",
+    // Embedded / Build
+    "S", "s", "asm",                    // Assembly
+    "ld", "lds", "lcf", "icf", "sct", // Linker scripts
+    "mk", "mak",                          // Makefiles
+    "d",                                    // Dependency files
+    "ioc",                                 // STM32CubeMX config
+    "uvprojx", "uvoptx", "uvproj",     // Keil MDK
+    "project", "cproject",                // Eclipse CDT
+    "launch",                              // IDE launch configs
+    "cfg", "conf", "config",            // Config files
+    "ini",                                 // INI config
+    "properties",                          // Java/Gradle properties
+    "bat", "cmd",                         // Windows scripts
+    "cmake",                               // CMake
+    "SConscript", "SConstruct",           // SCons
+    "rttlaunch",                           // RT-Thread launch
+    "prefs",                               // Eclipse prefs
+    "pyc",                                 // Python compiled (track for completeness)
 ];
 
 /// Extensions to always skip (binaries, assets, compiled artifacts)
@@ -188,6 +206,7 @@ fn should_skip_dir(name: &str) -> bool {
 // ══════════════════════════════════════════════════
 
 fn do_scan(project_path: &str, root: &PathBuf, max_depth: u32) -> Result<GraphData, String> {
+    eprintln!("[scan] starting scan: path={}, max_depth={}", project_path, max_depth);
     let root_label = root
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -287,7 +306,10 @@ fn walk(
 ) -> std::io::Result<()> {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
-        Err(_) => return Ok(()), // Permission denied → skip silently
+        Err(e) => {
+            eprintln!("[scan] read_dir failed for {}: {}", dir.display(), e);
+            return Ok(()); // Permission denied → skip silently
+        }
     };
 
     for entry in entries.flatten() {
